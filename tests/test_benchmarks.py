@@ -77,6 +77,74 @@ class TestSABenchRunner:
         errors = runner.validate_config(config)
         assert errors == []
 
+    def test_validate_config_rejects_non_positive_num_requests(self):
+        from srtctl.benchmarks.sa_bench import SABenchRunner
+        from srtctl.core.schema import BenchmarkConfig, ModelConfig, ResourceConfig, SrtConfig
+
+        runner = SABenchRunner()
+        config = SrtConfig(
+            name="test",
+            model=ModelConfig(path="/model", container="/image", precision="fp4"),
+            resources=ResourceConfig(gpu_type="h100"),
+            benchmark=BenchmarkConfig(
+                type="sa-bench",
+                isl=1024,
+                osl=1024,
+                concurrencies="4x8",
+                num_requests=0,
+            ),
+        )
+        errors = runner.validate_config(config)
+        assert any("num_requests" in e for e in errors)
+
+    def test_build_command_num_requests_defaults_to_empty(self):
+        """Unset num_requests is passed as empty string so bench.sh uses 10× concurrency."""
+        from unittest.mock import MagicMock
+
+        from srtctl.benchmarks.sa_bench import SABenchRunner
+        from srtctl.core.schema import BenchmarkConfig, ModelConfig, ResourceConfig, SrtConfig
+
+        runner = SABenchRunner()
+        runtime = MagicMock()
+        runtime.frontend_port = 8000
+        runtime.is_hf_model = False
+
+        config = SrtConfig(
+            name="test",
+            model=ModelConfig(path="/model", container="/image", precision="fp4"),
+            resources=ResourceConfig(gpu_type="h100"),
+            benchmark=BenchmarkConfig(type="sa-bench", isl=1024, osl=128, concurrencies="1x2", req_rate="inf"),
+        )
+        cmd = runner.build_command(config, runtime)
+        assert cmd[-1] == ""
+
+    def test_build_command_num_requests_explicit(self):
+        from unittest.mock import MagicMock
+
+        from srtctl.benchmarks.sa_bench import SABenchRunner
+        from srtctl.core.schema import BenchmarkConfig, ModelConfig, ResourceConfig, SrtConfig
+
+        runner = SABenchRunner()
+        runtime = MagicMock()
+        runtime.frontend_port = 8000
+        runtime.is_hf_model = False
+
+        config = SrtConfig(
+            name="test",
+            model=ModelConfig(path="/model", container="/image", precision="fp4"),
+            resources=ResourceConfig(gpu_type="h100"),
+            benchmark=BenchmarkConfig(
+                type="sa-bench",
+                isl=1024,
+                osl=128,
+                concurrencies="1x2",
+                req_rate="inf",
+                num_requests=500,
+            ),
+        )
+        cmd = runner.build_command(config, runtime)
+        assert cmd[-1] == "500"
+
 
 class TestSGLangBenchRunner:
     """Test SGLang-Bench runner."""

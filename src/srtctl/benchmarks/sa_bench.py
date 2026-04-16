@@ -27,6 +27,7 @@ class SABenchRunner(BenchmarkRunner):
 
     Optional:
         - benchmark.req_rate: Request rate (default: "inf")
+        - benchmark.num_requests: Main benchmark --num-prompts; if unset, uses 10 × each concurrency level
     """
 
     @property
@@ -51,6 +52,8 @@ class SABenchRunner(BenchmarkRunner):
             errors.append("benchmark.osl is required for sa-bench")
         if b.concurrencies is None:
             errors.append("benchmark.concurrencies is required for sa-bench")
+        if b.num_requests is not None and b.num_requests <= 0:
+            errors.append("benchmark.num_requests must be a positive integer when set")
 
         return errors
 
@@ -97,5 +100,6 @@ class SABenchRunner(BenchmarkRunner):
             str(prefill_gpus),
             str(decode_gpus),
             str(b.random_range_ratio) if b.random_range_ratio is not None else "0.8",
+            str(b.num_requests) if b.num_requests is not None else "",
         ]
         return cmd

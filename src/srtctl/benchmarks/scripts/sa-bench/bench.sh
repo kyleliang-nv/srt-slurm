@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # SA-Bench: Throughput/latency benchmark
-# Expects: endpoint isl osl concurrencies req_rate model_name is_disaggregated total_gpus prefill_gpus decode_gpus
+# Expects: endpoint isl osl concurrencies req_rate tokenizer_path model_name is_disaggregated total_gpus prefill_gpus decode_gpus random_range_ratio [num_requests]
 
 set -e
 
@@ -60,6 +60,8 @@ TOTAL_GPUS=${9:-0}
 PREFILL_GPUS=${10:-0}
 DECODE_GPUS=${11:-0}
 RANDOM_RANGE_RATIO=${12:-0.8}
+# Optional: fixed --num-prompts for the main benchmark; if empty, uses 10 × concurrency per level
+NUM_REQUESTS_CONFIG=${13:-}
 
 # Parse endpoint into host:port
 HOST=$(echo "$ENDPOINT" | sed 's|http://||' | cut -d: -f1)
@@ -67,7 +69,7 @@ PORT=$(echo "$ENDPOINT" | sed 's|http://||' | cut -d: -f2 | cut -d/ -f1)
 
 WORK_DIR="$(dirname "$0")"
 
-echo "SA-Bench Config: endpoint=${ENDPOINT}; isl=${ISL}; osl=${OSL}; concurrencies=${CONCURRENCIES}; req_rate=${REQ_RATE}; model=${MODEL_NAME}"
+echo "SA-Bench Config: endpoint=${ENDPOINT}; isl=${ISL}; osl=${OSL}; concurrencies=${CONCURRENCIES}; req_rate=${REQ_RATE}; model=${MODEL_NAME}; num_requests=${NUM_REQUESTS_CONFIG:-<10x concurrency>}"
 
 # Profiling shared helpers
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -121,7 +123,11 @@ for concurrency in "${CONCURRENCY_LIST[@]}"; do
         --max-concurrency "$concurrency" \
         --trust-remote-code
 
-    num_prompts=$((concurrency * 10))
+    if [ -n "$NUM_REQUESTS_CONFIG" ]; then
+        num_prompts="$NUM_REQUESTS_CONFIG"
+    else
+        num_prompts=$((concurrency * 10))
+    fi
     
     # Generate result filename based on mode
     if [ "$IS_DISAGGREGATED" = "true" ]; then

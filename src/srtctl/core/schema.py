@@ -530,7 +530,7 @@ class BenchmarkConfig:
     temperature: float | None = None
     top_p: float | None = None
     top_k: int | None = None
-    # Router benchmark fields
+    # Router benchmark / optional sa-bench: main phase --num-prompts (sa-bench default: 10 × each concurrency)
     num_requests: int | None = None
     concurrency: int | None = None
     prefix_ratios: list[float] | str | None = None
