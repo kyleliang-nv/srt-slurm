@@ -807,7 +807,7 @@ class MonitoringConfig:
 
     When enabled, one perfmon process runs per worker node (excluding the head node)
     and writes per-node output files to the job log directory:
-      - perf_samples_{node}.csv   per-second time-series (GPU util, memory, power, temp)
+      - perf_samples_{node}.csv   per-second time-series (GPU util, memory, power.draw, power.draw.instant, temp)
       - perf_summary_{node}.json  aggregate statistics over the benchmark window
 
     Uses nvidia-smi — no external dependencies required.

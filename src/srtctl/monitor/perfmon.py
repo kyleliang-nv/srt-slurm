@@ -4,7 +4,7 @@
 """Lightweight GPU performance monitor.
 
 Polls nvidia-smi at a fixed interval and writes:
-  - per-second CSV samples   (--output-csv)
+  - per-second CSV samples   (--output-csv; includes power.draw and power.draw.instant)
   - aggregate summary JSON   (--output-json, written on SIGINT/exit)
 
 Usage:
@@ -22,8 +22,19 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
-_QUERY = "index,utilization.gpu,memory.used,memory.total,power.draw,temperature.gpu"
-_FIELDS = ["gpu", "util_pct", "mem_used_mb", "mem_total_mb", "power_w", "temp_c"]
+_QUERY = (
+    "index,utilization.gpu,memory.used,memory.total,"
+    "power.draw,power.draw.instant,temperature.gpu"
+)
+_FIELDS = [
+    "gpu",
+    "util_pct",
+    "mem_used_mb",
+    "mem_total_mb",
+    "power_w",
+    "power_instant_w",
+    "temp_c",
+]
 
 
 def _sample() -> list[dict]:
@@ -38,7 +49,7 @@ def _sample() -> list[dict]:
     for line in out.strip().splitlines():
         parts = [p.strip() for p in line.split(",")]
         if len(parts) == len(_FIELDS):
-            rows.append(dict(zip(_FIELDS, parts)))
+            rows.append(dict(zip(_FIELDS, parts, strict=True)))
     return rows
 
 
@@ -60,6 +71,7 @@ def _summarize(samples: list[dict]) -> dict:
             "avg_mem_used_mb": avg("mem_used_mb"),
             "mem_total_mb": avg("mem_total_mb"),
             "avg_power_w": avg("power_w"),
+            "avg_power_instant_w": avg("power_instant_w"),
             "avg_temp_c": avg("temp_c"),
         }
     return summary
