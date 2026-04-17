@@ -105,7 +105,7 @@ class SweepOrchestrator(WorkerStageMixin, FrontendStageMixin, BenchmarkStageMixi
             "--name",
             self.config.name,
             "--log-dir",
-            str(self.runtime.log_dir),
+            "/logs",
         ]
 
         mounts = dict(self.runtime.container_mounts)
@@ -130,14 +130,14 @@ class SweepOrchestrator(WorkerStageMixin, FrontendStageMixin, BenchmarkStageMixi
             critical=True,
         )
 
-        # 300s timeout to handle slow container imports on first run
+        # 600s timeout to handle slow container imports (sqsh unpack) on first run
         logger.info("Waiting for NATS (port 4222) on %s...", infra_node)
-        if not wait_for_port(infra_node, 4222, timeout=300):
+        if not wait_for_port(infra_node, 4222, timeout=600):
             raise RuntimeError("NATS failed to start")
         logger.info("NATS is ready")
 
         logger.info("Waiting for etcd (port 2379) on %s...", infra_node)
-        if not wait_for_port(infra_node, 2379, timeout=300):
+        if not wait_for_port(infra_node, 2379, timeout=600):
             raise RuntimeError("etcd failed to start")
         logger.info("etcd is ready")
 

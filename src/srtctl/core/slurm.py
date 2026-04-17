@@ -227,6 +227,7 @@ def start_srun_process(
         srun_cmd.extend(["--container-image", str(container_image)])
         srun_cmd.append("--no-container-entrypoint")
         srun_cmd.append("--no-container-mount-home")
+        srun_cmd.append("--container-writable")
 
         if container_mounts:
             mount_str = ",".join(f"{host}:{container}" for host, container in container_mounts.items())

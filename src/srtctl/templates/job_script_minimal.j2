@@ -100,7 +100,10 @@ echo ""
 # Output goes to SLURM's --output (sweep_%j.log)
 set +e  # Temporarily disable exit-on-error to capture exit code
 cd "${SRTCTL_SOURCE}"
-uv run --python 3.12 --no-dev -m srtctl.cli.do_sweep "${OUTPUT_DIR}/{{ runtime_config_filename }}"
+export UV_CACHE_DIR="/tmp/uv-cache-${USER}"
+export UV_PROJECT_ENVIRONMENT="/tmp/srtctl-venv-${USER}"
+export PYTHONUNBUFFERED=1
+uv run --python 3.12 --no-dev --frozen -m srtctl.cli.do_sweep "${OUTPUT_DIR}/{{ runtime_config_filename }}"
 EXIT_CODE=$?
 set -e  # Re-enable exit-on-error
 
