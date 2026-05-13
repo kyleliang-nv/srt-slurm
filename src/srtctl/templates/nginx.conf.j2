@@ -6,6 +6,9 @@ worker_processes auto;
 
 http {
     access_log off;
+    # Long-context synthetic prompts can exceed nginx's 1 MiB default body limit.
+    client_max_body_size 0;
+
     upstream backend_servers {
         {% for frontend_host in frontend_hosts %}
         server {{ frontend_host }}:{{ backend_port | default(8000) }};
