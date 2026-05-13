@@ -684,16 +684,27 @@ class DynamoConfig:
         version: Install specific version from PyPI (e.g., "0.8.0")
         hash: Clone repo and checkout specific commit hash
         top_of_tree: Clone repo at HEAD (latest)
+        request_plane: Communication plane for Dynamo workers. "nats" keeps
+                       legacy behavior; "tcp" uses direct TCP connections.
 
     If top_of_tree or hash is set, version is automatically cleared.
     """
+
+    _VALID_REQUEST_PLANES = ("nats", "tcp", "http")
 
     install: bool = True
     version: str | None = "0.8.0"
     hash: str | None = None
     top_of_tree: bool = False
+    request_plane: str = "nats"
 
     def __post_init__(self) -> None:
+        if self.request_plane not in self._VALID_REQUEST_PLANES:
+            raise ValueError(
+                f"Invalid request_plane {self.request_plane!r}; must be one of: "
+                f"{', '.join(self._VALID_REQUEST_PLANES)}"
+            )
+
         # Auto-clear version if hash or top_of_tree is set
         if self.hash is not None or self.top_of_tree:
             object.__setattr__(self, "version", None)

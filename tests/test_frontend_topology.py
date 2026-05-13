@@ -9,7 +9,7 @@ from unittest.mock import MagicMock, patch
 from srtctl.cli.do_sweep import SweepOrchestrator
 from srtctl.cli.mixins.frontend_stage import FrontendTopology
 from srtctl.core.runtime import Nodes, RuntimeContext
-from srtctl.core.schema import FrontendConfig, ResourceConfig, SrtConfig
+from srtctl.core.schema import DynamoConfig, FrontendConfig, ResourceConfig, SrtConfig
 
 
 def make_config(
@@ -17,6 +17,9 @@ def make_config(
     enable_multiple_frontends: bool = True,
     num_additional_frontends: int = 9,
     frontend_type: str = "dynamo",
+    request_plane: str = "nats",
+    prefill_workers: int | None = None,
+    decode_workers: int | None = None,
 ) -> SrtConfig:
     """Create a minimal SrtConfig for testing."""
     return SrtConfig(
@@ -27,12 +30,15 @@ def make_config(
             gpus_per_node=8,
             prefill_nodes=1,
             decode_nodes=1,
+            prefill_workers=prefill_workers,
+            decode_workers=decode_workers,
         ),
         frontend=FrontendConfig(
             type=frontend_type,
             enable_multiple_frontends=enable_multiple_frontends,
             num_additional_frontends=num_additional_frontends,
         ),
+        dynamo=DynamoConfig(request_plane=request_plane),
     )
 
 
@@ -172,6 +178,22 @@ class TestComputeFrontendTopology:
         assert topology.frontend_nodes == ["node1", "node2"]
         assert len(topology.frontend_nodes) == 2
 
+    def test_backend_system_ports_start_after_dynamo_frontend_range(self):
+        """Backend system ports should not collide with Dynamo frontend ports."""
+        config = make_config(
+            enable_multiple_frontends=False,
+            frontend_type="dynamo",
+            prefill_workers=1,
+            decode_workers=1,
+        )
+        runtime = make_runtime(["node0", "node1", "node2"])
+
+        orchestrator = SweepOrchestrator(config=config, runtime=runtime)
+        processes = orchestrator.backend_processes
+
+        assert processes
+        assert processes[0].sys_port == 8089
+
 
 class TestNginxConfigGeneration:
     """Tests for nginx config generation."""
@@ -239,6 +261,24 @@ class TestStartFrontendIntegration:
         assert len(processes) == 1
         assert processes[0].name == "frontend_0"
         assert processes[0].node == "node0"
+
+    @patch("srtctl.frontends.dynamo.start_srun_process")
+    def test_dynamo_frontend_uses_configured_request_plane_and_system_port(self, mock_dynamo_srun):
+        """Dynamo frontend should avoid worker system ports and honor request_plane."""
+        mock_dynamo_srun.return_value = MagicMock()
+
+        config = make_config(enable_multiple_frontends=False, frontend_type="dynamo", request_plane="tcp")
+        runtime = make_runtime(["node0", "node1"])
+        orchestrator = SweepOrchestrator(config=config, runtime=runtime)
+
+        registry = MagicMock()
+        processes = orchestrator.start_frontend(registry)
+
+        assert len(processes) == 1
+        env = mock_dynamo_srun.call_args.kwargs["env_to_set"]
+        assert env["DYN_REQUEST_PLANE"] == "tcp"
+        assert env["DYN_SYSTEM_PORT"] == "8081"
+        assert env["DYN_TCP_POOL_SIZE"] == "2048"
 
     @patch("srtctl.frontends.sglang.start_srun_process")
     @patch("srtctl.cli.mixins.frontend_stage.start_srun_process")

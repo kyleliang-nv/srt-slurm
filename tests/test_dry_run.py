@@ -178,6 +178,14 @@ class TestDryRunEnvironment:
         assert "TRTLLM_SERVER_DISABLE_GC" in output
         assert "decode" in output
 
+    def test_dynamo_request_plane_environment(self, capsys):
+        config = _make_config({"dynamo": {"install": False, "request_plane": "tcp"}})
+        show_config_details(config)
+        output = capsys.readouterr().out
+        assert "DYN_REQUEST_PLANE" in output
+        assert "tcp" in output
+        assert "dynamo" in output
+
 
 class TestDryRunSrunOptions:
     """Test that srun options appear in dry-run output."""

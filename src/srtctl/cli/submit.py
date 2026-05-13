@@ -116,6 +116,8 @@ def show_config_details(config: SrtConfig) -> None:
 
     # --- Environment Variables ---
     has_env = bool(config.environment)
+    if config.dynamo.request_plane != "nats":
+        has_env = True
     backend = config.backend
     mode_envs: list[tuple[str, dict[str, str]]] = []
     for mode_name, attr in [
@@ -136,6 +138,9 @@ def show_config_details(config: SrtConfig) -> None:
 
         for var, val in sorted(config.environment.items()):
             env_table.add_row("global", var, val)
+
+        if config.dynamo.request_plane != "nats":
+            env_table.add_row("dynamo", "DYN_REQUEST_PLANE", config.dynamo.request_plane)
 
         for mode_name, env in mode_envs:
             for var, val in sorted(env.items()):

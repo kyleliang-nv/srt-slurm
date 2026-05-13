@@ -245,6 +245,23 @@ class TestEndpointsToProcesses:
         http_ports = [p.http_port for p in processes]
         assert len(http_ports) == len(set(http_ports)), "Processes on same node should have unique http_ports"
 
+    def test_sys_port_stride(self):
+        """Dynamo MPI endpoints reserve a range of system ports per launch."""
+        endpoints = allocate_endpoints(
+            num_prefill=1,
+            num_decode=1,
+            num_agg=0,
+            gpus_per_prefill=4,
+            gpus_per_decode=4,
+            gpus_per_agg=0,
+            gpus_per_node=4,
+            available_nodes=("node0", "node1"),
+        )
+
+        processes = endpoints_to_processes(endpoints, base_sys_port=8085, sys_port_stride=4)
+
+        assert [p.sys_port for p in processes] == [8085, 8089]
+
     def test_multi_node_process_construction(self):
         """Test process construction for multi-node endpoints."""
         endpoints = allocate_endpoints(

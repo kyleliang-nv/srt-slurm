@@ -104,6 +104,7 @@ class TestDynamoConfig:
         assert config.version == "0.8.0"
         assert config.hash is None
         assert config.top_of_tree is False
+        assert config.request_plane == "nats"
         assert not config.needs_source_install
 
     def test_version_install_command(self):
@@ -155,6 +156,63 @@ class TestDynamoConfig:
 
         with pytest.raises(ValueError, match="Cannot specify both"):
             DynamoConfig(hash="abc123", top_of_tree=True)
+
+    def test_request_plane_tcp(self):
+        """request_plane can be set to tcp."""
+        from srtctl.core.schema import DynamoConfig
+
+        config = DynamoConfig(request_plane="tcp")
+        assert config.request_plane == "tcp"
+
+    def test_request_plane_http(self):
+        """request_plane can be set to http."""
+        from srtctl.core.schema import DynamoConfig
+
+        config = DynamoConfig(request_plane="http")
+        assert config.request_plane == "http"
+
+    def test_request_plane_invalid(self):
+        """Invalid request_plane raises ValueError."""
+        from srtctl.core.schema import DynamoConfig
+
+        with pytest.raises(ValueError, match="Invalid request_plane"):
+            DynamoConfig(request_plane="grpc")
+
+
+class TestTRTLLMProtocol:
+    """Tests for TRTLLMProtocol."""
+
+    def test_worker_command_uses_runtime_request_plane(self, tmp_path):
+        """TRTLLM launch should honor the configured Dynamo request plane."""
+        from unittest.mock import MagicMock
+
+        from srtctl.backends import TRTLLMProtocol
+        from srtctl.core.topology import Process
+
+        backend = TRTLLMProtocol()
+        process = Process(
+            node="node0",
+            gpu_indices=frozenset([0, 1, 2, 3]),
+            sys_port=8085,
+            http_port=30000,
+            endpoint_mode="prefill",
+            endpoint_index=0,
+            node_rank=0,
+        )
+
+        mock_runtime = MagicMock()
+        mock_runtime.log_dir = tmp_path
+        mock_runtime.model_path = Path("/models/test-model")
+        mock_runtime.request_plane = "tcp"
+
+        cmd = backend.build_worker_command(
+            process=process,
+            endpoint_processes=[process],
+            runtime=mock_runtime,
+        )
+
+        idx = cmd.index("--request-plane")
+        assert cmd[idx + 1] == "tcp"
 
 
 class TestSGLangProtocol:

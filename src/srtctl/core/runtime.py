@@ -108,6 +108,9 @@ class RuntimeContext:
     # HuggingFace model support - True if model.path was "hf:model/name"
     is_hf_model: bool = False
 
+    # Dynamo request plane: "nats", "tcp", or "http"
+    request_plane: str = "nats"
+
     # Container mounts: host_path -> container_path
     container_mounts: dict[Path, Path] = field(default_factory=dict)
 
@@ -249,6 +252,7 @@ class RuntimeContext:
             srun_options=dict(config.srun_options),
             environment=dict(config.environment),
             is_hf_model=is_hf_model,
+            request_plane=config.dynamo.request_plane,
         )
 
         # Expand FormattablePath mounts
@@ -272,6 +276,7 @@ class RuntimeContext:
             srun_options=dict(config.srun_options),
             environment=dict(config.environment),
             is_hf_model=is_hf_model,
+            request_plane=config.dynamo.request_plane,
         )
 
     def format_string(self, template: str, **extra_kwargs) -> str:
