@@ -72,6 +72,12 @@ class DynamoFrontend:
 
         processes: list[ManagedProcess] = []
 
+        # Match the worker's MPI plugin when the TRTLLM backend has opted into
+        # the explicit PMIx-v5 ABI (the container ships PMIx 5.x). Generic
+        # "pmix" is fine for SGLang/vLLM and for TRTLLM on racks where the
+        # site-default plugin is already v5-compatible.
+        mpi_plugin = "pmix_v5" if getattr(backend, "enable_pmix_v5", False) else "pmix"
+
         for idx, node in enumerate(topology.frontend_nodes):
             logger.info("Starting dynamo frontend %d on %s", idx, node)
 
@@ -104,7 +110,7 @@ class DynamoFrontend:
                 bash_preamble=bash_preamble,
                 # TODO(jthomson): I don't have the faintest clue of
                 # why this is needed in later versions of Dynamo, but it is.
-                mpi="pmix",
+                mpi=mpi_plugin,
             )
 
             processes.append(

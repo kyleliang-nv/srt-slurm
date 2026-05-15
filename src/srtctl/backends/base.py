@@ -6,7 +6,7 @@ Base types and protocols for backend configurations.
 """
 
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 from typing import TYPE_CHECKING, Any, Optional, Protocol
 
@@ -34,12 +34,16 @@ class SrunConfig:
         launch_per_endpoint: If True, launch one srun per endpoint (all nodes together).
                             If False, launch one srun per process (per node).
         cpu_bind: CPU binding mode (e.g., "verbose,none" for TRTLLM). None to omit.
+        extra_options: Additional srun flags required by the backend (e.g.,
+                       {"no-container-remap-root": ""} for TRTLLM on GB200).
+                       Empty string value renders as a bare flag; non-empty as --key value.
     """
 
     mpi: str | None = None
     oversubscribe: bool = False
     launch_per_endpoint: bool = False
     cpu_bind: str | None = None
+    extra_options: dict[str, str] = field(default_factory=dict)
 
 
 class BackendProtocol(Protocol):

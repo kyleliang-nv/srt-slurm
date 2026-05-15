@@ -214,6 +214,26 @@ class TestTRTLLMProtocol:
         idx = cmd.index("--request-plane")
         assert cmd[idx + 1] == "tcp"
 
+    def test_srun_config_default(self):
+        """Default TRTLLM srun config uses generic pmix and no extra options."""
+        from srtctl.backends import TRTLLMProtocol
+
+        srun_config = TRTLLMProtocol().get_srun_config()
+        assert srun_config.mpi == "pmix"
+        assert srun_config.extra_options == {}
+
+    def test_srun_config_enable_pmix_v5(self):
+        """enable_pmix_v5=True bumps mpi to pmix_v5 and adds --no-container-remap-root."""
+        from srtctl.backends import TRTLLMProtocol
+
+        srun_config = TRTLLMProtocol(enable_pmix_v5=True).get_srun_config()
+        assert srun_config.mpi == "pmix_v5"
+        assert srun_config.extra_options == {"no-container-remap-root": ""}
+        # Other fields should be unaffected
+        assert srun_config.oversubscribe is True
+        assert srun_config.launch_per_endpoint is True
+        assert srun_config.cpu_bind == "verbose,none"
+
 
 class TestSGLangProtocol:
     """Tests for SGLangProtocol."""

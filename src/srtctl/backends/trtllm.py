@@ -63,6 +63,17 @@ class TRTLLMProtocol:
 
     trtllm_config: TRTLLMServerConfig | None = None
 
+    # Opt-in for clusters whose Slurm needs the explicit PMIx-v5 ABI (e.g. GB200
+    # racks where the TRTLLM container ships PMIx 5.x). When True:
+    #   - srun --mpi=pmix is bumped to --mpi=pmix_v5 (matches the container's
+    #     PMIx 5.x ABI; generic "pmix" often resolves to v3/v4 on the host)
+    #   - srun gets --no-container-remap-root so UID 0 inside the container
+    #     stays root (TRTLLM's launcher / NIXL / SHM paths assume real root,
+    #     which the PMIx-v5 setup also requires)
+    # The frontend mpi flag is also bumped to pmix_v5 when this is set
+    # (see srtctl/frontends/dynamo.py).
+    enable_pmix_v5: bool = False
+
     Schema: ClassVar[builtins.type[Schema]] = Schema
 
     # =========================================================================
@@ -73,11 +84,17 @@ class TRTLLMProtocol:
         """TRTLLM uses MPI-style launching (one srun per endpoint with all nodes)."""
         from srtctl.backends.base import SrunConfig
 
+        mpi = "pmix_v5" if self.enable_pmix_v5 else "pmix"
+        extra_options: dict[str, str] = {}
+        if self.enable_pmix_v5:
+            extra_options["no-container-remap-root"] = ""
+
         return SrunConfig(
-            mpi="pmix",
+            mpi=mpi,
             oversubscribe=True,
             launch_per_endpoint=True,
             cpu_bind="verbose,none",
+            extra_options=extra_options,
         )
 
     def get_config_for_mode(self, mode: WorkerMode) -> dict[str, Any]:

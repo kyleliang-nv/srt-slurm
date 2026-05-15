@@ -278,6 +278,10 @@ class WorkerStageMixin:
         # Get srun config from backend
         srun_config = self.backend.get_srun_config()
 
+        # Merge user-supplied srun_options with backend-required ones.
+        # Backend keys win on conflict (they're load-bearing for the worker).
+        merged_srun_options = {**self.runtime.srun_options, **srun_config.extra_options}
+
         proc = start_srun_process(
             command=cmd,
             nodes=num_nodes,
@@ -288,6 +292,7 @@ class WorkerStageMixin:
             container_mounts=self.runtime.container_mounts,
             env_to_set=env_to_set,
             bash_preamble=bash_preamble,
+            srun_options=merged_srun_options,
             mpi=srun_config.mpi,
             oversubscribe=srun_config.oversubscribe,
             cpu_bind=srun_config.cpu_bind,
