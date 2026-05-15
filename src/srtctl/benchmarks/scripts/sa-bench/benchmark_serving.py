@@ -332,6 +332,62 @@ def sample_hf_requests(
     return sampled_requests
 
 
+def sample_preformatted_requests(
+    dataset_path: str,
+    num_requests: int | None = None,
+) -> list[tuple[str, int, int, None]]:
+    """Load a preformatted JSONL dataset (one record per line).
+
+    Each line is expected to look like::
+
+        {"input": {"messages": [{"role": "system", "content": "..."},
+                                {"role": "user",   "content": "..."}]},
+         "num_tokens": <int>, "max_tokens": <int>, ...}
+
+    The last user-turn ``content`` is sent to the server as the prompt
+    verbatim — chat templates must already be rendered into it (e.g.
+    DeepSeek-style ``<|User|>...<|Assistant|>`` markers). ``num_tokens``
+    becomes ``prompt_len`` and ``max_tokens`` becomes ``output_len``. No
+    tokenizer work is performed, which is the whole point of this loader:
+    skip request generation entirely on long-ISL workloads.
+
+    If ``num_requests`` exceeds the file's record count, the dataset is
+    cycled and a warning is emitted.
+    """
+    requests: list[tuple[str, int, int, None]] = []
+    with open(dataset_path, encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            r = json.loads(line)
+            messages = r["input"]["messages"]
+            # Use the last user turn so multi-turn dialogues still work.
+            prompt = next(m["content"] for m in reversed(messages) if m.get("role") == "user")
+            prompt_len = int(r.get("num_tokens", r.get("expected_tokens", 0)))
+            output_len = int(r["max_tokens"])
+            requests.append((prompt, prompt_len, output_len, None))
+            if num_requests is not None and len(requests) >= num_requests:
+                break
+
+    if not requests:
+        raise ValueError(f"No records found in preformatted dataset {dataset_path}")
+
+    if num_requests is not None and len(requests) < num_requests:
+        warnings.warn(
+            f"Preformatted dataset {dataset_path} has {len(requests)} records but "
+            f"{num_requests} were requested; cycling through the file.",
+            stacklevel=2,
+        )
+        original = list(requests)
+        i = 0
+        while len(requests) < num_requests:
+            requests.append(original[i % len(original)])
+            i += 1
+
+    return requests
+
+
 def sample_random_requests(
     prefix_len: int,
     input_len: int,
@@ -923,6 +979,14 @@ def main(args: argparse.Namespace):
             use_chat_template=args.use_chat_template,
         )
 
+    elif args.dataset_name == "preformatted":
+        if not args.dataset_path:
+            raise ValueError("--dataset-path is required when --dataset-name=preformatted")
+        input_requests = sample_preformatted_requests(
+            dataset_path=args.dataset_path,
+            num_requests=args.num_prompts,
+        )
+
     else:
         raise ValueError(f"Unknown dataset: {args.dataset_name}")
 
@@ -1032,14 +1096,18 @@ if __name__ == "__main__":
         "--dataset-name",
         type=str,
         default="sharegpt",
-        choices=["sharegpt", "burstgpt", "sonnet", "random", "hf"],
+        choices=["sharegpt", "burstgpt", "sonnet", "random", "hf", "preformatted"],
         help="Name of the dataset to benchmark on.",
     )
     parser.add_argument(
         "--dataset-path",
         type=str,
         default=None,
-        help="Path to the sharegpt/sonnet dataset. " "Or the huggingface dataset ID if using HF dataset.",
+        help=(
+            "Path to the sharegpt/sonnet dataset, the huggingface dataset ID for HF, "
+            "or the JSONL file for the 'preformatted' dataset (one record per line "
+            "with input.messages, num_tokens, max_tokens)."
+        ),
     )
     parser.add_argument(
         "--max-concurrency",

@@ -177,10 +177,14 @@ class BenchmarkStageMixin:
         procs: list[tuple[str, subprocess.Popen]] = []
         for node in worker_nodes:
             cmd = [
-                "python3", "/tmp/srt_perfmon.py",
-                "--output-csv", f"/logs/perf_samples_{node}.csv",
-                "--output-json", f"/logs/perf_summary_{node}.json",
-                "--interval", str(m.sample_interval),
+                "python3",
+                "/tmp/srt_perfmon.py",
+                "--output-csv",
+                f"/logs/perf_samples_{node}.csv",
+                "--output-json",
+                f"/logs/perf_summary_{node}.json",
+                "--interval",
+                str(m.sample_interval),
             ]
             perf_log = self.runtime.log_dir / f"perf_monitor_{node}.out"
             try:

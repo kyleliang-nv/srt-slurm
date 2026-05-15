@@ -540,6 +540,14 @@ class BenchmarkConfig:
     ttft_threshold_ms: int | None = None  # Goodput TTFT threshold in ms (default: 2000)
     itl_threshold_ms: int | None = None  # Goodput ITL threshold in ms (default: 25)
     random_range_ratio: float | None = None  # Random input/output length range ratio (default: 0.8)
+    # SA-bench dataset selection:
+    #   None / "random"       -> synthesize random prompts of length isl/osl (default)
+    #   "preformatted"        -> read in-container JSONL at dataset_path (one record per line:
+    #                            {"input": {"messages": [...]}, "num_tokens": N, "max_tokens": M})
+    # The dataset file must already be visible inside the benchmark container — mount it via
+    # container_mounts/extra_mount and pass the in-container path here.
+    dataset_name: str | None = None
+    dataset_path: str | None = None
 
     def get_concurrency_list(self) -> list[int]:
         if self.concurrencies is None:
@@ -701,8 +709,7 @@ class DynamoConfig:
     def __post_init__(self) -> None:
         if self.request_plane not in self._VALID_REQUEST_PLANES:
             raise ValueError(
-                f"Invalid request_plane {self.request_plane!r}; must be one of: "
-                f"{', '.join(self._VALID_REQUEST_PLANES)}"
+                f"Invalid request_plane {self.request_plane!r}; must be one of: {', '.join(self._VALID_REQUEST_PLANES)}"
             )
 
         # Auto-clear version if hash or top_of_tree is set

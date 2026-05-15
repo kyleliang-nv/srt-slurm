@@ -3,7 +3,10 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # SA-Bench: Throughput/latency benchmark
-# Expects: endpoint isl osl concurrencies req_rate tokenizer_path model_name is_disaggregated total_gpus prefill_gpus decode_gpus random_range_ratio [num_requests]
+# Expects: endpoint isl osl concurrencies req_rate tokenizer_path model_name is_disaggregated total_gpus prefill_gpus decode_gpus random_range_ratio [num_requests] [dataset_name] [dataset_path]
+# When dataset_name=preformatted, dataset_path is the in-container path to a JSONL file
+# (one record per line: {"input": {"messages": [...]}, "num_tokens": N, "max_tokens": M}).
+# In that mode bench.sh skips --random-* flags and --use-chat-template (template is already baked in).
 
 set -e
 
@@ -62,6 +65,18 @@ DECODE_GPUS=${11:-0}
 RANDOM_RANGE_RATIO=${12:-0.8}
 # Optional: fixed --num-prompts for the main benchmark; if empty, uses 10 × concurrency per level
 NUM_REQUESTS_CONFIG=${13:-}
+# Optional: dataset selection. "random" (default) or "preformatted" (JSONL at DATASET_PATH).
+DATASET_NAME=${14:-random}
+DATASET_PATH=${15:-}
+
+if [ "$DATASET_NAME" = "preformatted" ] && [ -z "$DATASET_PATH" ]; then
+    echo "ERROR: dataset_name=preformatted requires dataset_path (in-container JSONL path)" >&2
+    exit 2
+fi
+if [ "$DATASET_NAME" = "preformatted" ] && [ ! -f "$DATASET_PATH" ]; then
+    echo "ERROR: preformatted dataset not found at $DATASET_PATH (mount it via container_mounts/extra_mount)" >&2
+    exit 2
+fi
 
 # Parse endpoint into host:port
 HOST=$(echo "$ENDPOINT" | sed 's|http://||' | cut -d: -f1)
@@ -69,7 +84,24 @@ PORT=$(echo "$ENDPOINT" | sed 's|http://||' | cut -d: -f2 | cut -d/ -f1)
 
 WORK_DIR="$(dirname "$0")"
 
-echo "SA-Bench Config: endpoint=${ENDPOINT}; isl=${ISL}; osl=${OSL}; concurrencies=${CONCURRENCIES}; req_rate=${REQ_RATE}; model=${MODEL_NAME}; num_requests=${NUM_REQUESTS_CONFIG:-<10x concurrency>}"
+echo "SA-Bench Config: endpoint=${ENDPOINT}; isl=${ISL}; osl=${OSL}; concurrencies=${CONCURRENCIES}; req_rate=${REQ_RATE}; model=${MODEL_NAME}; num_requests=${NUM_REQUESTS_CONFIG:-<10x concurrency>}; dataset=${DATASET_NAME}${DATASET_PATH:+ (${DATASET_PATH})}"
+
+# Build dataset args once. For "random" we synthesize prompts with --random-*;
+# for "preformatted" we point at a pre-baked JSONL and skip tokenization entirely.
+DATASET_ARGS=()
+EXTRA_MAIN_ARGS=()
+if [ "$DATASET_NAME" = "preformatted" ]; then
+    DATASET_ARGS=(--dataset-name preformatted --dataset-path "$DATASET_PATH")
+    # Chat template is already rendered into the prompts; do NOT re-apply.
+else
+    DATASET_ARGS=(
+        --dataset-name random
+        --random-input-len "$ISL"
+        --random-output-len "$OSL"
+        --random-range-ratio "${RANDOM_RANGE_RATIO}"
+    )
+    EXTRA_MAIN_ARGS=(--use-chat-template)
+fi
 
 # Profiling shared helpers
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -112,11 +144,8 @@ for concurrency in "${CONCURRENCY_LIST[@]}"; do
         --host "$HOST" --port "$PORT" \
         --backend "dynamo" --endpoint /v1/completions \
         --disable-tqdm \
-        --dataset-name random \
+        "${DATASET_ARGS[@]}" \
         --num-prompts "$num_warmup_prompts" \
-        --random-input-len "$ISL" \
-        --random-output-len "$OSL" \
-        --random-range-ratio "${RANDOM_RANGE_RATIO}" \
         --ignore-eos \
         --request-rate 250 \
         --percentile-metrics ttft,tpot,itl,e2el \
@@ -145,17 +174,14 @@ for concurrency in "${CONCURRENCY_LIST[@]}"; do
         --host "$HOST" --port "$PORT" \
         --backend "dynamo" --endpoint /v1/completions \
         --disable-tqdm \
-        --dataset-name random \
+        "${DATASET_ARGS[@]}" \
         --num-prompts "$num_prompts" \
-        --random-input-len "$ISL" \
-        --random-output-len "$OSL" \
-        --random-range-ratio "${RANDOM_RANGE_RATIO}" \
         --ignore-eos \
         --request-rate "${REQ_RATE}" \
         --percentile-metrics ttft,tpot,itl,e2el \
         --max-concurrency "$concurrency" \
         --trust-remote-code \
-        --use-chat-template \
+        "${EXTRA_MAIN_ARGS[@]}" \
         --save-result --result-dir "$result_dir" --result-filename "$result_filename"
     set +x
 

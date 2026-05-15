@@ -28,6 +28,11 @@ class SABenchRunner(BenchmarkRunner):
     Optional:
         - benchmark.req_rate: Request rate (default: "inf")
         - benchmark.num_requests: Main benchmark --num-prompts; if unset, uses 10 × each concurrency level
+        - benchmark.dataset_name: "random" (default) or "preformatted"
+        - benchmark.dataset_path: in-container path to a JSONL dataset file when dataset_name="preformatted"
+          (mount it yourself via container_mounts / extra_mount). Each line:
+          {"input": {"messages": [...]}, "num_tokens": N, "max_tokens": M}.
+          Skips all tokenization, so isl/osl become nominal labels and the file's lengths are used.
     """
 
     @property
@@ -54,6 +59,16 @@ class SABenchRunner(BenchmarkRunner):
             errors.append("benchmark.concurrencies is required for sa-bench")
         if b.num_requests is not None and b.num_requests <= 0:
             errors.append("benchmark.num_requests must be a positive integer when set")
+
+        if b.dataset_name is not None and b.dataset_name not in ("random", "preformatted"):
+            errors.append(f"benchmark.dataset_name must be 'random' or 'preformatted' (got {b.dataset_name!r})")
+        if b.dataset_name == "preformatted" and not b.dataset_path:
+            errors.append(
+                "benchmark.dataset_path is required when benchmark.dataset_name=preformatted "
+                "(in-container path to the JSONL file; mount it via container_mounts/extra_mount)"
+            )
+        if b.dataset_path and b.dataset_name not in (None, "preformatted"):
+            errors.append("benchmark.dataset_path is only used when benchmark.dataset_name=preformatted")
 
         return errors
 
@@ -101,5 +116,7 @@ class SABenchRunner(BenchmarkRunner):
             str(decode_gpus),
             str(b.random_range_ratio) if b.random_range_ratio is not None else "0.8",
             str(b.num_requests) if b.num_requests is not None else "",
+            b.dataset_name or "random",
+            b.dataset_path or "",
         ]
         return cmd

@@ -116,7 +116,12 @@ class TestSABenchRunner:
             benchmark=BenchmarkConfig(type="sa-bench", isl=1024, osl=128, concurrencies="1x2", req_rate="inf"),
         )
         cmd = runner.build_command(config, runtime)
-        assert cmd[-1] == ""
+        # Positional layout (see SABenchRunner.build_command):
+        #   ..., random_range_ratio[13], num_requests[14], dataset_name[15], dataset_path[16]
+        # Empty num_requests means bench.sh falls back to 10 × concurrency.
+        assert cmd[14] == ""
+        assert cmd[15] == "random"
+        assert cmd[16] == ""
 
     def test_build_command_num_requests_explicit(self):
         from unittest.mock import MagicMock
@@ -143,7 +148,97 @@ class TestSABenchRunner:
             ),
         )
         cmd = runner.build_command(config, runtime)
-        assert cmd[-1] == "500"
+        assert cmd[14] == "500"
+
+    def test_build_command_preformatted_dataset(self):
+        """dataset_name=preformatted threads the path through to bench.sh."""
+        from unittest.mock import MagicMock
+
+        from srtctl.benchmarks.sa_bench import SABenchRunner
+        from srtctl.core.schema import BenchmarkConfig, ModelConfig, ResourceConfig, SrtConfig
+
+        runner = SABenchRunner()
+        runtime = MagicMock()
+        runtime.frontend_port = 8000
+        runtime.is_hf_model = False
+
+        config = SrtConfig(
+            name="test",
+            model=ModelConfig(path="/model", container="/image", precision="fp4"),
+            resources=ResourceConfig(gpu_type="h100"),
+            benchmark=BenchmarkConfig(
+                type="sa-bench",
+                isl=131072,
+                osl=8192,
+                concurrencies="1x2",
+                dataset_name="preformatted",
+                dataset_path="/datasets/deepseek-r1.jsonl",
+            ),
+        )
+        cmd = runner.build_command(config, runtime)
+        assert cmd[15] == "preformatted"
+        assert cmd[16] == "/datasets/deepseek-r1.jsonl"
+
+    def test_validate_preformatted_requires_dataset_path(self):
+        from srtctl.benchmarks.sa_bench import SABenchRunner
+        from srtctl.core.schema import BenchmarkConfig, ModelConfig, ResourceConfig, SrtConfig
+
+        runner = SABenchRunner()
+        config = SrtConfig(
+            name="test",
+            model=ModelConfig(path="/model", container="/image", precision="fp4"),
+            resources=ResourceConfig(gpu_type="h100"),
+            benchmark=BenchmarkConfig(
+                type="sa-bench",
+                isl=1024,
+                osl=1024,
+                concurrencies="4x8",
+                dataset_name="preformatted",
+            ),
+        )
+        errors = runner.validate_config(config)
+        assert any("dataset_path" in e for e in errors)
+
+    def test_validate_dataset_path_without_preformatted(self):
+        from srtctl.benchmarks.sa_bench import SABenchRunner
+        from srtctl.core.schema import BenchmarkConfig, ModelConfig, ResourceConfig, SrtConfig
+
+        runner = SABenchRunner()
+        config = SrtConfig(
+            name="test",
+            model=ModelConfig(path="/model", container="/image", precision="fp4"),
+            resources=ResourceConfig(gpu_type="h100"),
+            benchmark=BenchmarkConfig(
+                type="sa-bench",
+                isl=1024,
+                osl=1024,
+                concurrencies="4x8",
+                dataset_name="random",
+                dataset_path="/datasets/foo.jsonl",
+            ),
+        )
+        errors = runner.validate_config(config)
+        assert any("dataset_path is only used" in e for e in errors)
+
+    def test_validate_unknown_dataset_name(self):
+        from srtctl.benchmarks.sa_bench import SABenchRunner
+        from srtctl.core.schema import BenchmarkConfig, ModelConfig, ResourceConfig, SrtConfig
+
+        runner = SABenchRunner()
+        config = SrtConfig(
+            name="test",
+            model=ModelConfig(path="/model", container="/image", precision="fp4"),
+            resources=ResourceConfig(gpu_type="h100"),
+            benchmark=BenchmarkConfig(
+                type="sa-bench",
+                isl=1024,
+                osl=1024,
+                concurrencies="4x8",
+                dataset_name="sharegpt",
+            ),
+        )
+        errors = runner.validate_config(config)
+        assert any("dataset_name" in e for e in errors)
 
 
 class TestSGLangBenchRunner:

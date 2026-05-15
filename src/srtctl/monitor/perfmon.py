@@ -22,10 +22,7 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
-_QUERY = (
-    "index,utilization.gpu,memory.used,memory.total,"
-    "power.draw,power.draw.instant,temperature.gpu"
-)
+_QUERY = "index,utilization.gpu,memory.used,memory.total,power.draw,power.draw.instant,temperature.gpu"
 _FIELDS = [
     "gpu",
     "util_pct",
