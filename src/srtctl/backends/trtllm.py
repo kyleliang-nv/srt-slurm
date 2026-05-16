@@ -63,15 +63,17 @@ class TRTLLMProtocol:
 
     trtllm_config: TRTLLMServerConfig | None = None
 
-    # Opt-in for clusters whose Slurm needs the explicit PMIx-v5 ABI (e.g. GB200
-    # racks where the TRTLLM container ships PMIx 5.x). When True:
-    #   - srun --mpi=pmix is bumped to --mpi=pmix_v5 (matches the container's
-    #     PMIx 5.x ABI; generic "pmix" often resolves to v3/v4 on the host)
-    #   - srun gets --no-container-remap-root so UID 0 inside the container
-    #     stays root (TRTLLM's launcher / NIXL / SHM paths assume real root,
-    #     which the PMIx-v5 setup also requires)
-    # The frontend mpi flag is also bumped to pmix_v5 when this is set
-    # (see srtctl/frontends/dynamo.py).
+    # Opt-in for clusters whose Slurm needs the explicit PMIx-v5 ABI to match
+    # the TRTLLM container (e.g. GB200 racks where the operator container ships
+    # PMIx 5.x). When True, the operator srun gets:
+    #   - --mpi=pmix_v5 (instead of the generic "pmix" which often resolves to
+    #     a v3/v4 server on the host and hangs wireup)
+    #   - --no-container-remap-root so UID 0 inside the container stays root
+    #     (TRTLLM's launcher / NIXL / SHM paths assume real root, which the
+    #     PMIx-v5 setup also requires)
+    # NOTE: This flag does NOT affect the dynamo frontend launch — the
+    # dynamo.frontend process uses an OpenMPI built against PMIx 3.x and must
+    # stay on --mpi=pmix (see srtctl/frontends/dynamo.py).
     enable_pmix_v5: bool = False
 
     Schema: ClassVar[builtins.type[Schema]] = Schema

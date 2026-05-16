@@ -341,11 +341,11 @@ def sample_preformatted_requests(
     Each line is expected to look like::
 
         {"input": {"messages": [{"role": "system", "content": "..."},
-                                {"role": "user",   "content": "..."}]},
-         "num_tokens": <int>, "max_tokens": <int>, ...}
+                                {"role": "user",   "content": "..."}],
+                   "num_tokens": <int>, "max_tokens": <int>}, ...}
 
     The last user-turn ``content`` is sent to the server as the prompt
-    verbatim — chat templates must already be rendered into it (e.g.
+    verbatim - chat templates must already be rendered into it (e.g.
     DeepSeek-style ``<|User|>...<|Assistant|>`` markers). ``num_tokens``
     becomes ``prompt_len`` and ``max_tokens`` becomes ``output_len``. No
     tokenizer work is performed, which is the whole point of this loader:
@@ -361,11 +361,15 @@ def sample_preformatted_requests(
             if not line:
                 continue
             r = json.loads(line)
-            messages = r["input"]["messages"]
+            request_input = r.get("input", r)
+            messages = request_input["messages"]
             # Use the last user turn so multi-turn dialogues still work.
             prompt = next(m["content"] for m in reversed(messages) if m.get("role") == "user")
-            prompt_len = int(r.get("num_tokens", r.get("expected_tokens", 0)))
-            output_len = int(r["max_tokens"])
+            prompt_len = int(request_input.get("num_tokens", r.get("num_tokens", r.get("expected_tokens", 0))))
+            output_len_value = request_input.get("max_tokens", r.get("max_tokens"))
+            if output_len_value is None:
+                raise ValueError("Preformatted dataset records must include max_tokens")
+            output_len = int(output_len_value)
             requests.append((prompt, prompt_len, output_len, None))
             if num_requests is not None and len(requests) >= num_requests:
                 break
