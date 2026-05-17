@@ -45,6 +45,7 @@ class TRTLLMProtocol:
     Example YAML:
         backend:
           type: trtllm
+          numactl_membind: "0,1"
           prefill_environment:
             CUDA_LAUNCH_BLOCKING: "1"
           trtllm_config:
@@ -75,6 +76,11 @@ class TRTLLMProtocol:
     # dynamo.frontend process uses an OpenMPI built against PMIx 3.x and must
     # stay on --mpi=pmix (see srtctl/frontends/dynamo.py).
     enable_pmix_v5: bool = False
+
+    # Optional NUMA memory binding for TRT-LLM worker processes. When set, the
+    # server command is launched as:
+    #   trtllm-llmapi-launch numactl -m <numactl_membind> python3 -m dynamo.trtllm ...
+    numactl_membind: str | None = None
 
     Schema: ClassVar[builtins.type[Schema]] = Schema
 
@@ -196,8 +202,11 @@ class TRTLLMProtocol:
         container_config_path = Path("/logs") / config_filename
         container_model_path = Path("/model")
 
-        cmd = [
-            "trtllm-llmapi-launch",
+        cmd = ["trtllm-llmapi-launch"]
+        if self.numactl_membind:
+            cmd.extend(["numactl", "-m", self.numactl_membind])
+
+        cmd += [
             "python3",
             "-m",
             "dynamo.trtllm",

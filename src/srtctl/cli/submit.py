@@ -155,6 +155,11 @@ def show_config_details(config: SrtConfig) -> None:
         opts = " ".join(f"--{k} {v}" if v else f"--{k}" for k, v in config.srun_options.items())
         console.print(f"[dim]srun options:[/] {opts}")
 
+    # --- Backend launch options ---
+    numactl_membind = getattr(config.backend, "numactl_membind", None)
+    if numactl_membind:
+        console.print(f"[dim]backend launch:[/] numactl -m {numactl_membind}")
+
 
 def generate_minimal_sbatch_script(
     config: SrtConfig,

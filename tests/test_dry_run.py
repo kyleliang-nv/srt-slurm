@@ -202,3 +202,14 @@ class TestDryRunSrunOptions:
         show_config_details(config)
         output = capsys.readouterr().out
         assert "srun options" not in output
+
+
+class TestDryRunBackendLaunchOptions:
+    """Test backend launch options appear in dry-run output."""
+
+    def test_trtllm_numactl_membind_shown(self, capsys):
+        config = _make_config({"backend": {"type": "trtllm", "numactl_membind": "0,1"}})
+        show_config_details(config)
+        output = capsys.readouterr().out
+        assert "backend launch" in output
+        assert "numactl -m 0,1" in output

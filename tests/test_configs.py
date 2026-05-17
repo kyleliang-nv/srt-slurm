@@ -214,6 +214,37 @@ class TestTRTLLMProtocol:
         idx = cmd.index("--request-plane")
         assert cmd[idx + 1] == "tcp"
 
+    def test_worker_command_adds_numactl_membind(self, tmp_path):
+        """TRTLLM launch can wrap workers with numactl memory binding."""
+        from unittest.mock import MagicMock
+
+        from srtctl.backends import TRTLLMProtocol
+        from srtctl.core.topology import Process
+
+        backend = TRTLLMProtocol(numactl_membind="0,1")
+        process = Process(
+            node="node0",
+            gpu_indices=frozenset([0, 1, 2, 3]),
+            sys_port=8085,
+            http_port=30000,
+            endpoint_mode="prefill",
+            endpoint_index=0,
+            node_rank=0,
+        )
+
+        mock_runtime = MagicMock()
+        mock_runtime.log_dir = tmp_path
+        mock_runtime.model_path = Path("/models/test-model")
+        mock_runtime.request_plane = "tcp"
+
+        cmd = backend.build_worker_command(
+            process=process,
+            endpoint_processes=[process],
+            runtime=mock_runtime,
+        )
+
+        assert cmd[:6] == ["trtllm-llmapi-launch", "numactl", "-m", "0,1", "python3", "-m"]
+
     def test_srun_config_default(self):
         """Default TRTLLM srun config uses generic pmix and no extra options."""
         from srtctl.backends import TRTLLMProtocol
