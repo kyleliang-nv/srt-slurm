@@ -193,6 +193,7 @@ class TestDynamoFrontendLaunch:
 
         assert mock_srun.call_args.kwargs["mpi"] is None
         assert mock_srun.call_args.kwargs["env_to_set"]["OMPI_MCA_ess"] == "singleton"
+        assert "unset ${!SLURM_@} ${!PMI_@} ${!PMIX_@}" in mock_srun.call_args.kwargs["bash_preamble"]
 
     @patch("srtctl.frontends.dynamo.start_srun_process")
     def test_uses_generic_pmix_by_default(self, mock_srun):
@@ -218,6 +219,7 @@ class TestDynamoFrontendLaunch:
 
         assert mock_srun.call_args.kwargs["mpi"] == "pmix"
         assert "OMPI_MCA_ess" not in mock_srun.call_args.kwargs["env_to_set"]
+        assert mock_srun.call_args.kwargs["bash_preamble"] is None
 
 
 # ============================================================================

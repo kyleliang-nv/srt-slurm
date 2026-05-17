@@ -104,6 +104,17 @@ class DynamoFrontend:
 
             # Build bash preamble (setup script + dynamo install)
             bash_preamble = self._build_preamble(config)
+            if use_openmpi_singleton:
+                # OpenMPI still detects Slurm direct launch through inherited
+                # SLURM_/PMI_/PMIX_ env vars even when this frontend srun omits
+                # --mpi. Scrub those before importing dynamo.frontend; the
+                # frontend only needs NATS/etcd and its HTTP/system ports.
+                slurm_env_scrub = "unset ${!SLURM_@} ${!PMI_@} ${!PMIX_@}"
+                bash_preamble = (
+                    f"{slurm_env_scrub} && {bash_preamble}"
+                    if bash_preamble
+                    else slurm_env_scrub
+                )
 
             proc = start_srun_process(
                 command=cmd,
