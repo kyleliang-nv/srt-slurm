@@ -170,8 +170,8 @@ class TestDynamoFrontendLaunch:
     """Tests for Dynamo frontend launch wiring."""
 
     @patch("srtctl.frontends.dynamo.start_srun_process")
-    def test_uses_pmix_v3_when_backend_enables_pmix_v5(self, mock_srun):
-        """Frontend PMIx ABI is independent from TRTLLM worker PMIx ABI."""
+    def test_uses_openmpi_singleton_when_backend_enables_pmix_v5(self, mock_srun):
+        """Frontend avoids Slurm PMI/PMIx direct launch in TRTLLM PMIx-v5 mode."""
         mock_srun.return_value = MagicMock()
         frontend = DynamoFrontend()
         topology = MockTopology(frontend_nodes=["node1"])
@@ -191,7 +191,8 @@ class TestDynamoFrontendLaunch:
 
         frontend.start_frontends(topology, runtime, config, backend, [])
 
-        assert mock_srun.call_args.kwargs["mpi"] == "pmix_v3"
+        assert mock_srun.call_args.kwargs["mpi"] is None
+        assert mock_srun.call_args.kwargs["env_to_set"]["OMPI_MCA_ess"] == "singleton"
 
     @patch("srtctl.frontends.dynamo.start_srun_process")
     def test_uses_generic_pmix_by_default(self, mock_srun):
@@ -216,6 +217,7 @@ class TestDynamoFrontendLaunch:
         frontend.start_frontends(topology, runtime, config, backend, [])
 
         assert mock_srun.call_args.kwargs["mpi"] == "pmix"
+        assert "OMPI_MCA_ess" not in mock_srun.call_args.kwargs["env_to_set"]
 
 
 # ============================================================================

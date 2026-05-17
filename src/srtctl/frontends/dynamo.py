@@ -72,12 +72,14 @@ class DynamoFrontend:
 
         processes: list[ManagedProcess] = []
 
-        # When TRTLLM workers opt into PMIx v5, the cluster's generic "pmix"
-        # alias can also resolve to a v5 Slurm plugin. The frontend process,
-        # however, imports OpenMPI from /opt/dynamo/venv built against PMIx 3.x
-        # (errors mention pmix3x_client.c). Pin it to the matching Slurm plugin
-        # instead of inheriting the site-default alias.
-        mpi_plugin = "pmix_v3" if getattr(backend, "enable_pmix_v5", False) else "pmix"
+        # When TRTLLM workers opt into PMIx v5, keep the single-process
+        # frontend out of Slurm's PMI/PMIx direct-launch path. dynamo.frontend
+        # imports an OpenMPI stack from /opt/dynamo/venv that fails MPI_Init
+        # against this rack's Slurm PMIx plugins (errors mention
+        # pmix3x_client.c). It does not need a multi-rank MPI world, so force
+        # OpenMPI singleton mode and omit --mpi for the frontend step.
+        use_openmpi_singleton = getattr(backend, "enable_pmix_v5", False)
+        mpi_plugin = None if use_openmpi_singleton else "pmix"
 
         for idx, node in enumerate(topology.frontend_nodes):
             logger.info("Starting dynamo frontend %d on %s", idx, node)
@@ -93,6 +95,8 @@ class DynamoFrontend:
                 "DYN_SYSTEM_PORT": str(DYNAMO_SYSTEM_PORT_BASE + idx),
                 "DYN_TCP_POOL_SIZE": "2048",
             }
+            if use_openmpi_singleton:
+                env_to_set["OMPI_MCA_ess"] = "singleton"
 
             # Add frontend env from config
             if config.frontend.env:

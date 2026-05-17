@@ -72,9 +72,10 @@ class TRTLLMProtocol:
     #   - --no-container-remap-root so UID 0 inside the container stays root
     #     (TRTLLM's launcher / NIXL / SHM paths assume real root, which the
     #     PMIx-v5 setup also requires)
-    # NOTE: The dynamo frontend has its own PMIx ABI handling. When this flag is
-    # set, frontend launches pin --mpi=pmix_v3 because dynamo.frontend imports an
-    # OpenMPI built against PMIx 3.x (see srtctl/frontends/dynamo.py).
+    # NOTE: The dynamo frontend has its own MPI handling. When this flag is set,
+    # frontend launches omit --mpi and force OpenMPI singleton mode because
+    # dynamo.frontend imports an OpenMPI stack that fails Slurm PMI/PMIx direct
+    # launch on this rack (see srtctl/frontends/dynamo.py).
     enable_pmix_v5: bool = False
 
     # Optional NUMA memory binding for TRT-LLM worker processes. When set, the
