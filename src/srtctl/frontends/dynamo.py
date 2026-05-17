@@ -72,6 +72,13 @@ class DynamoFrontend:
 
         processes: list[ManagedProcess] = []
 
+        # When TRTLLM workers opt into PMIx v5, the cluster's generic "pmix"
+        # alias can also resolve to a v5 Slurm plugin. The frontend process,
+        # however, imports OpenMPI from /opt/dynamo/venv built against PMIx 3.x
+        # (errors mention pmix3x_client.c). Pin it to the matching Slurm plugin
+        # instead of inheriting the site-default alias.
+        mpi_plugin = "pmix_v3" if getattr(backend, "enable_pmix_v5", False) else "pmix"
+
         for idx, node in enumerate(topology.frontend_nodes):
             logger.info("Starting dynamo frontend %d on %s", idx, node)
 
@@ -104,15 +111,7 @@ class DynamoFrontend:
                 bash_preamble=bash_preamble,
                 # TODO(jthomson): I don't have the faintest clue of
                 # why this is needed in later versions of Dynamo, but it is.
-                #
-                # NOTE: Stay on generic "pmix" here even when the TRTLLM
-                # backend opts into enable_pmix_v5. The dynamo.frontend
-                # process pulls in OpenMPI from /opt/dynamo/venv built
-                # against PMIx 3.x; --mpi=pmix_v5 makes Slurm advertise a
-                # v5 server that the v3 client cannot reach
-                # ("OPAL ERROR: Unreachable in pmix3x_client.c"). Only
-                # the operator container ships PMIx 5.x.
-                mpi="pmix",
+                mpi=mpi_plugin,
             )
 
             processes.append(

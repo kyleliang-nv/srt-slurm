@@ -4,6 +4,7 @@
 """Tests for frontend implementations (SGLang and Dynamo)."""
 
 from dataclasses import dataclass
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -163,6 +164,58 @@ class TestGetFrontendArgsList:
         assert "--router-mode" in result
         assert "kv" in result
         assert "--router-reset-states" in result
+
+
+class TestDynamoFrontendLaunch:
+    """Tests for Dynamo frontend launch wiring."""
+
+    @patch("srtctl.frontends.dynamo.start_srun_process")
+    def test_uses_pmix_v3_when_backend_enables_pmix_v5(self, mock_srun):
+        """Frontend PMIx ABI is independent from TRTLLM worker PMIx ABI."""
+        mock_srun.return_value = MagicMock()
+        frontend = DynamoFrontend()
+        topology = MockTopology(frontend_nodes=["node1"])
+        runtime = MagicMock()
+        runtime.log_dir = Path("/logs")
+        runtime.nodes.infra = "node0"
+        runtime.container_image = "trtllm.sqsh"
+        runtime.container_mounts = {}
+        config = MagicMock()
+        config.frontend.args = None
+        config.frontend.env = None
+        config.dynamo.request_plane = "nats"
+        config.dynamo.install = False
+        config.setup_script = None
+        backend = MagicMock()
+        backend.enable_pmix_v5 = True
+
+        frontend.start_frontends(topology, runtime, config, backend, [])
+
+        assert mock_srun.call_args.kwargs["mpi"] == "pmix_v3"
+
+    @patch("srtctl.frontends.dynamo.start_srun_process")
+    def test_uses_generic_pmix_by_default(self, mock_srun):
+        """Existing Dynamo frontend behavior is preserved by default."""
+        mock_srun.return_value = MagicMock()
+        frontend = DynamoFrontend()
+        topology = MockTopology(frontend_nodes=["node1"])
+        runtime = MagicMock()
+        runtime.log_dir = Path("/logs")
+        runtime.nodes.infra = "node0"
+        runtime.container_image = "trtllm.sqsh"
+        runtime.container_mounts = {}
+        config = MagicMock()
+        config.frontend.args = None
+        config.frontend.env = None
+        config.dynamo.request_plane = "nats"
+        config.dynamo.install = False
+        config.setup_script = None
+        backend = MagicMock()
+        backend.enable_pmix_v5 = False
+
+        frontend.start_frontends(topology, runtime, config, backend, [])
+
+        assert mock_srun.call_args.kwargs["mpi"] == "pmix"
 
 
 # ============================================================================
