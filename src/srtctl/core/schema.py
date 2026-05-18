@@ -376,6 +376,8 @@ class ModelConfig:
     path: str
     container: str
     precision: str
+    copy_to_local_tmp: bool = False
+    local_tmp_dir: str = "/tmp/srtctl-model-cache"
 
     Schema: ClassVar[type[Schema]] = Schema
 

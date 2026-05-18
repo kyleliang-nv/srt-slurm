@@ -198,10 +198,9 @@ class TRTLLMProtocol:
         host_config_path = runtime.log_dir / config_filename
         host_config_path.write_text(yaml.safe_dump(config))
 
-        # Use container paths for the command
-        # (model_path is mounted to /model, log_dir is mounted to /logs)
+        # Use container paths for the command. The model may be a node-local
+        # copy when model.copy_to_local_tmp is enabled.
         container_config_path = Path("/logs") / config_filename
-        container_model_path = Path("/model")
 
         cmd = ["trtllm-llmapi-launch"]
         if self.numactl_membind:
@@ -212,7 +211,7 @@ class TRTLLMProtocol:
             "-m",
             "dynamo.trtllm",
             "--model-path",
-            str(container_model_path),
+            str(runtime.server_model_path),
             "--served-model-name",
             runtime.model_path.name,
         ]

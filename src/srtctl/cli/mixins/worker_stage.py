@@ -29,6 +29,49 @@ def _wrap_command_with_rank_system_port(cmd: list[str], base_port: int) -> list[
     return ["bash", "-lc", inner]
 
 
+def _build_local_model_copy_preamble(runtime: "RuntimeContext") -> str:
+    """Copy the mounted model to a stable node-local /tmp path once per node."""
+    source = shlex.quote(str(runtime.model_source_container_path))
+    target = shlex.quote(str(runtime.server_model_path))
+    return f"""
+set -e
+MODEL_SOURCE={source}
+MODEL_TARGET={target}
+MODEL_COMPLETE="${{MODEL_TARGET}}/.srtctl_model_copy_complete"
+MODEL_LOCK="${{MODEL_TARGET}}.copy.lock"
+if [ ! -f "${{MODEL_COMPLETE}}" ]; then
+  echo "Preparing node-local model copy: ${{MODEL_SOURCE}} -> ${{MODEL_TARGET}}"
+  mkdir -p "$(dirname "${{MODEL_TARGET}}")"
+  acquired_lock=0
+  while [ ! -f "${{MODEL_COMPLETE}}" ]; do
+    if mkdir "${{MODEL_LOCK}}" 2>/dev/null; then
+      acquired_lock=1
+      break
+    fi
+    echo "Waiting for node-local model copy at ${{MODEL_TARGET}}"
+    sleep 5
+  done
+  if [ "${{acquired_lock}}" = "1" ]; then
+    MODEL_TMP="${{MODEL_TARGET}}.tmp.$$"
+    rm -rf "${{MODEL_TMP}}"
+    mkdir -p "${{MODEL_TMP}}"
+    if command -v rsync >/dev/null 2>&1; then
+      rsync -a --delete "${{MODEL_SOURCE}}"/ "${{MODEL_TMP}}"/
+    else
+      cp -a "${{MODEL_SOURCE}}"/. "${{MODEL_TMP}}"/
+    fi
+    touch "${{MODEL_TMP}}/.srtctl_model_copy_complete"
+    rm -rf "${{MODEL_TARGET}}"
+    mv "${{MODEL_TMP}}" "${{MODEL_TARGET}}"
+    rmdir "${{MODEL_LOCK}}"
+    echo "Node-local model copy ready at ${{MODEL_TARGET}}"
+  fi
+else
+  echo "Using existing node-local model copy at ${{MODEL_TARGET}}"
+fi
+""".strip()
+
+
 class WorkerStageMixin:
     """Mixin for worker process startup stage.
 
@@ -66,6 +109,11 @@ class WorkerStageMixin:
         2. Dynamo installation (if frontend type is dynamo)
         """
         parts = []
+
+        # 0. Optional node-local model copy. This runs inside each worker srun
+        # step; the lock makes MPI ranks on the same node share one copy.
+        if self.runtime.copy_model_to_local_tmp:
+            parts.append(_build_local_model_copy_preamble(self.runtime))
 
         # 1. Custom setup script (runs first)
         if self.config.setup_script:

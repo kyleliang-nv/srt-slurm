@@ -8,6 +8,7 @@ This module provides the single source of truth for all runtime values,
 replacing scattered bash variables and Jinja templating with typed Python.
 """
 
+import hashlib
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -108,6 +109,14 @@ class RuntimeContext:
     # HuggingFace model support - True if model.path was "hf:model/name"
     is_hf_model: bool = False
 
+    # Container-visible model paths. server_model_path may point to a node-local
+    # copy when model.copy_to_local_tmp is enabled; benchmark_model_path always
+    # points at a tokenizer-readable source path.
+    server_model_path: Path = Path("/model")
+    benchmark_model_path: Path = Path("/model")
+    model_source_container_path: Path = Path("/model")
+    copy_model_to_local_tmp: bool = False
+
     # Dynamo request plane: "nats", "tcp", or "http"
     request_plane: str = "nats"
 
@@ -181,6 +190,26 @@ class RuntimeContext:
             if not model_path.is_dir():
                 raise ValueError(f"Model path is not a directory: {model_path}")
 
+        copy_model_to_local_tmp = config.model.copy_to_local_tmp and not is_hf_model
+        if copy_model_to_local_tmp:
+            model_path_hash = hashlib.sha256(str(model_path).encode("utf-8")).hexdigest()[:12]
+            local_tmp_dir = Path(os.path.expandvars(config.model.local_tmp_dir))
+            if not local_tmp_dir.is_absolute():
+                raise ValueError("model.local_tmp_dir must be an absolute path")
+            try:
+                local_tmp_suffix = local_tmp_dir.relative_to("/tmp")
+            except ValueError as exc:
+                raise ValueError("model.local_tmp_dir must be under /tmp when copy_to_local_tmp is enabled") from exc
+
+            model_source_container_path = Path("/model-source")
+            local_model_name = f"{model_path.name}-{model_path_hash}"
+            server_model_path = Path("/host-tmp") / local_tmp_suffix / local_model_name
+            benchmark_model_path = model_source_container_path
+        else:
+            model_source_container_path = Path("/model")
+            server_model_path = Path("/model")
+            benchmark_model_path = Path("/model")
+
         # Resolve container image (expand env vars)
         # container_image can be either:
         # 1. A path to a container file (e.g., /containers/sglang.sqsh) - validate it exists
@@ -205,7 +234,9 @@ class RuntimeContext:
         }
         # Only mount local model paths - HF models are downloaded at runtime
         if not is_hf_model:
-            container_mounts[model_path] = Path("/model")
+            container_mounts[model_path] = model_source_container_path
+            if copy_model_to_local_tmp:
+                container_mounts[Path("/tmp")] = Path("/host-tmp")
 
         # Add configs directory (NATS, etcd binaries) from source root
         # SRTCTL_SOURCE_DIR is set by the sbatch script
@@ -252,6 +283,10 @@ class RuntimeContext:
             srun_options=dict(config.srun_options),
             environment=dict(config.environment),
             is_hf_model=is_hf_model,
+            server_model_path=server_model_path,
+            benchmark_model_path=benchmark_model_path,
+            model_source_container_path=model_source_container_path,
+            copy_model_to_local_tmp=copy_model_to_local_tmp,
             request_plane=config.dynamo.request_plane,
         )
 
@@ -276,6 +311,10 @@ class RuntimeContext:
             srun_options=dict(config.srun_options),
             environment=dict(config.environment),
             is_hf_model=is_hf_model,
+            server_model_path=server_model_path,
+            benchmark_model_path=benchmark_model_path,
+            model_source_container_path=model_source_container_path,
+            copy_model_to_local_tmp=copy_model_to_local_tmp,
             request_plane=config.dynamo.request_plane,
         )
 

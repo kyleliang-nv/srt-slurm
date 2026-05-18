@@ -88,7 +88,11 @@ def show_config_details(config: SrtConfig) -> None:
 
     # Built-in mounts (always present at runtime)
     model_path = os.path.expandvars(config.model.path)
-    mounts_table.add_row("built-in", model_path, "/model")
+    if config.model.copy_to_local_tmp:
+        mounts_table.add_row("built-in", model_path, "/model-source")
+        mounts_table.add_row("built-in", "/tmp", "/host-tmp")
+    else:
+        mounts_table.add_row("built-in", model_path, "/model")
     mounts_table.add_row("built-in", "<log_dir>", "/logs")
 
     # Cluster-level mounts from srtslurm.yaml
@@ -113,6 +117,16 @@ def show_config_details(config: SrtConfig) -> None:
             mounts_table.add_row("recipe", str(host_template), str(container_template))
 
     console.print(Panel(mounts_table, border_style="green"))
+
+    if config.model.copy_to_local_tmp:
+        console.print(
+            Panel(
+                f"Enabled: server workers copy /model-source to a stable node-local path under "
+                f"{config.model.local_tmp_dir} and launch from that copy if present.",
+                title="Node-Local Model Copy",
+                border_style="cyan",
+            )
+        )
 
     # --- Environment Variables ---
     has_env = bool(config.environment)

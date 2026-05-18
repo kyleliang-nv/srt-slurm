@@ -97,8 +97,9 @@ class SABenchRunner(BenchmarkRunner):
             prefill_gpus = 0
             decode_gpus = 0
 
-        # Tokenizer path: HF model ID or container mount path
-        tokenizer_path = str(runtime.model_path) if runtime.is_hf_model else "/model"
+        # Tokenizer path: HF model ID or container source path. The benchmark
+        # process does not need the node-local server copy.
+        tokenizer_path = str(runtime.model_path) if runtime.is_hf_model else str(runtime.benchmark_model_path)
 
         cmd = [
             "bash",

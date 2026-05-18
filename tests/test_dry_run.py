@@ -57,6 +57,15 @@ class TestDryRunMounts:
         assert "/model" in output
         assert "/logs" in output
 
+    def test_local_tmp_model_copy_mounts_shown(self, capsys):
+        config = _make_config({"model": {"copy_to_local_tmp": True}})
+        show_config_details(config)
+        output = capsys.readouterr().out
+        assert "/model-source" in output
+        assert "/host-tmp" in output
+        assert "Node-Local Model Copy" in output
+        assert "/tmp/srtctl-model-cache" in output
+
     def test_extra_mount_from_recipe(self, capsys):
         config = _make_config({"extra_mount": ["/data/custom:/custom", "/shared/cache:/cache"]})
         show_config_details(config)

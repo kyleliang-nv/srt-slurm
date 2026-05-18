@@ -310,8 +310,8 @@ class VLLMProtocol:
 
         # Determine model path: HF model ID or container mount path
         # For HF models (hf:prefix), model_path contains the HF model ID (e.g., "facebook/opt-125m")
-        # For local models, model is mounted to /model in the container
-        model_arg = str(runtime.model_path) if runtime.is_hf_model else "/model"
+        # For local models, use the server-visible path (possibly a node-local copy)
+        model_arg = str(runtime.model_path) if runtime.is_hf_model else str(runtime.server_model_path)
 
         # Get served model name from config or use model path name
         served_model_name = self.get_served_model_name(runtime.model_path.name)

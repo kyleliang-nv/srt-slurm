@@ -93,6 +93,51 @@ class TestSrtConfigStructure:
         assert total_needed <= total_available
 
 
+class TestRuntimeModelPaths:
+    """Tests for runtime model mount and server path resolution."""
+
+    def test_local_tmp_model_copy_changes_server_path_and_mounts(self, tmp_path):
+        """Opt-in local copy mounts the source model separately from the server path."""
+        from unittest.mock import patch
+
+        from srtctl.core.runtime import RuntimeContext
+        from srtctl.core.schema import ModelConfig, ResourceConfig
+
+        model_dir = tmp_path / "DeepSeek-R1"
+        model_dir.mkdir()
+        container = tmp_path / "container.sqsh"
+        container.touch()
+        config = SrtConfig(
+            name="test",
+            model=ModelConfig(
+                path=str(model_dir),
+                container=str(container),
+                precision="fp4",
+                copy_to_local_tmp=True,
+            ),
+            resources=ResourceConfig(gpu_type="gb300", gpus_per_node=4, agg_nodes=1, agg_workers=1),
+        )
+
+        def mock_setting(key, default=None):
+            if key == "network_interface":
+                return "eth0"
+            return default
+
+        with (
+            patch("srtctl.core.runtime.get_slurm_nodelist", return_value=["node0"]),
+            patch("srtctl.core.runtime.get_hostname_ip", return_value="10.0.0.1"),
+            patch("srtctl.core.runtime.get_srtslurm_setting", side_effect=mock_setting),
+        ):
+            runtime = RuntimeContext.from_config(config, "123", log_dir_base=tmp_path)
+
+        assert runtime.copy_model_to_local_tmp is True
+        assert runtime.model_source_container_path == Path("/model-source")
+        assert runtime.benchmark_model_path == Path("/model-source")
+        assert str(runtime.server_model_path).startswith("/host-tmp/srtctl-model-cache/DeepSeek-R1-")
+        assert runtime.container_mounts[model_dir.resolve()] == Path("/model-source")
+        assert runtime.container_mounts[Path("/tmp")] == Path("/host-tmp")
+
+
 class TestDynamoConfig:
     """Tests for DynamoConfig."""
 
@@ -203,6 +248,7 @@ class TestTRTLLMProtocol:
         mock_runtime = MagicMock()
         mock_runtime.log_dir = tmp_path
         mock_runtime.model_path = Path("/models/test-model")
+        mock_runtime.server_model_path = Path("/model")
         mock_runtime.request_plane = "tcp"
 
         cmd = backend.build_worker_command(
@@ -235,6 +281,7 @@ class TestTRTLLMProtocol:
         mock_runtime = MagicMock()
         mock_runtime.log_dir = tmp_path
         mock_runtime.model_path = Path("/models/test-model")
+        mock_runtime.server_model_path = Path("/model")
         mock_runtime.request_plane = "tcp"
 
         cmd = backend.build_worker_command(
@@ -244,6 +291,39 @@ class TestTRTLLMProtocol:
         )
 
         assert cmd[:6] == ["trtllm-llmapi-launch", "numactl", "-m", "0,1", "python3", "-m"]
+
+    def test_worker_command_uses_server_model_path(self, tmp_path):
+        """TRTLLM launch should use the runtime server model path."""
+        from unittest.mock import MagicMock
+
+        from srtctl.backends import TRTLLMProtocol
+        from srtctl.core.topology import Process
+
+        backend = TRTLLMProtocol()
+        process = Process(
+            node="node0",
+            gpu_indices=frozenset([0, 1, 2, 3]),
+            sys_port=8085,
+            http_port=30000,
+            endpoint_mode="decode",
+            endpoint_index=0,
+            node_rank=0,
+        )
+
+        mock_runtime = MagicMock()
+        mock_runtime.log_dir = tmp_path
+        mock_runtime.model_path = Path("/models/test-model")
+        mock_runtime.server_model_path = Path("/host-tmp/srtctl-model-cache/test-model-abc123")
+        mock_runtime.request_plane = "tcp"
+
+        cmd = backend.build_worker_command(
+            process=process,
+            endpoint_processes=[process],
+            runtime=mock_runtime,
+        )
+
+        idx = cmd.index("--model-path")
+        assert cmd[idx + 1] == "/host-tmp/srtctl-model-cache/test-model-abc123"
 
     def test_srun_config_default(self):
         """Default TRTLLM srun config uses generic pmix and no extra options."""
