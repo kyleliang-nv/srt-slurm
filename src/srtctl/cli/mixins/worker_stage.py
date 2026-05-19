@@ -56,9 +56,9 @@ if [ ! -f "${{MODEL_COMPLETE}}" ]; then
     rm -rf "${{MODEL_TMP}}"
     mkdir -p "${{MODEL_TMP}}"
     if command -v rsync >/dev/null 2>&1; then
-      rsync -a --delete "${{MODEL_SOURCE}}"/ "${{MODEL_TMP}}"/
+      rsync -aL --delete "${{MODEL_SOURCE}}"/ "${{MODEL_TMP}}"/
     else
-      cp -a "${{MODEL_SOURCE}}"/. "${{MODEL_TMP}}"/
+      cp -aL "${{MODEL_SOURCE}}"/. "${{MODEL_TMP}}"/
     fi
     touch "${{MODEL_TMP}}/.srtctl_model_copy_complete"
     rm -rf "${{MODEL_TARGET}}"

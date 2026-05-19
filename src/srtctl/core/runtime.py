@@ -192,7 +192,10 @@ class RuntimeContext:
 
         copy_model_to_local_tmp = config.model.copy_to_local_tmp and not is_hf_model
         if copy_model_to_local_tmp:
-            model_path_hash = hashlib.sha256(str(model_path).encode("utf-8")).hexdigest()[:12]
+            # Include a cache format tag so copy semantics changes (for example,
+            # materializing HF snapshot symlinks) do not reuse old local caches.
+            model_cache_key = f"{model_path}|dereference-symlinks-v1"
+            model_path_hash = hashlib.sha256(model_cache_key.encode("utf-8")).hexdigest()[:12]
             local_tmp_dir = Path(os.path.expandvars(config.model.local_tmp_dir))
             if not local_tmp_dir.is_absolute():
                 raise ValueError("model.local_tmp_dir must be an absolute path")
