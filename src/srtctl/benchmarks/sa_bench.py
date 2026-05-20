@@ -33,6 +33,7 @@ class SABenchRunner(BenchmarkRunner):
           (mount it yourself via container_mounts / extra_mount). Each line:
           {"input": {"messages": [...]}, "num_tokens": N, "max_tokens": M}.
           Skips all tokenization, so isl/osl become nominal labels and the file's lengths are used.
+        - benchmark.skip_warmup: if true, skip the per-concurrency warmup run (default: false).
     """
 
     @property
@@ -119,5 +120,6 @@ class SABenchRunner(BenchmarkRunner):
             str(b.num_requests) if b.num_requests is not None else "",
             b.dataset_name or "random",
             b.dataset_path or "",
+            "true" if b.skip_warmup else "false",
         ]
         return cmd

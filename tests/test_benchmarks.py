@@ -117,11 +117,14 @@ class TestSABenchRunner:
         )
         cmd = runner.build_command(config, runtime)
         # Positional layout (see SABenchRunner.build_command):
-        #   ..., random_range_ratio[13], num_requests[14], dataset_name[15], dataset_path[16]
+        #   ..., random_range_ratio[13], num_requests[14], dataset_name[15],
+        #   dataset_path[16], skip_warmup[17]
         # Empty num_requests means bench.sh falls back to 10 × concurrency.
         assert cmd[14] == ""
         assert cmd[15] == "random"
         assert cmd[16] == ""
+        # skip_warmup defaults to "false" — warmup runs.
+        assert cmd[17] == "false"
 
     def test_build_command_num_requests_explicit(self):
         from unittest.mock import MagicMock
@@ -219,6 +222,74 @@ class TestSABenchRunner:
         )
         errors = runner.validate_config(config)
         assert any("dataset_path is only used" in e for e in errors)
+
+    def test_build_command_skip_warmup_true(self):
+        """skip_warmup=True is passed through to bench.sh as 'true' at position 17."""
+        from unittest.mock import MagicMock
+
+        from srtctl.benchmarks.sa_bench import SABenchRunner
+        from srtctl.core.schema import BenchmarkConfig, ModelConfig, ResourceConfig, SrtConfig
+
+        runner = SABenchRunner()
+        runtime = MagicMock()
+        runtime.frontend_port = 8000
+        runtime.is_hf_model = False
+
+        config = SrtConfig(
+            name="test",
+            model=ModelConfig(path="/model", container="/image", precision="fp4"),
+            resources=ResourceConfig(gpu_type="h100"),
+            benchmark=BenchmarkConfig(
+                type="sa-bench",
+                isl=1024,
+                osl=128,
+                concurrencies="1x2",
+                req_rate="inf",
+                skip_warmup=True,
+            ),
+        )
+        cmd = runner.build_command(config, runtime)
+        assert cmd[17] == "true"
+
+    def test_build_command_skip_warmup_default_false(self):
+        """skip_warmup defaults to False (warmup runs) when not set in the config."""
+        from unittest.mock import MagicMock
+
+        from srtctl.benchmarks.sa_bench import SABenchRunner
+        from srtctl.core.schema import BenchmarkConfig, ModelConfig, ResourceConfig, SrtConfig
+
+        runner = SABenchRunner()
+        runtime = MagicMock()
+        runtime.frontend_port = 8000
+        runtime.is_hf_model = False
+
+        config = SrtConfig(
+            name="test",
+            model=ModelConfig(path="/model", container="/image", precision="fp4"),
+            resources=ResourceConfig(gpu_type="h100"),
+            benchmark=BenchmarkConfig(type="sa-bench", isl=1024, osl=128, concurrencies="1x2"),
+        )
+        cmd = runner.build_command(config, runtime)
+        assert cmd[17] == "false"
+
+    def test_skip_warmup_loaded_from_yaml(self):
+        """benchmark.skip_warmup: true in YAML is parsed onto BenchmarkConfig."""
+        from srtctl.core.schema import SrtConfig
+
+        yaml_dict = {
+            "name": "test",
+            "model": {"path": "/model", "container": "/image", "precision": "fp4"},
+            "resources": {"gpu_type": "h100"},
+            "benchmark": {
+                "type": "sa-bench",
+                "isl": 1024,
+                "osl": 128,
+                "concurrencies": "1x2",
+                "skip_warmup": True,
+            },
+        }
+        config = SrtConfig.Schema().load(yaml_dict)
+        assert config.benchmark.skip_warmup is True
 
     def test_validate_unknown_dataset_name(self):
         from srtctl.benchmarks.sa_bench import SABenchRunner

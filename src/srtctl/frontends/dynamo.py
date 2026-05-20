@@ -110,11 +110,7 @@ class DynamoFrontend:
                 # --mpi. Scrub those before importing dynamo.frontend; the
                 # frontend only needs NATS/etcd and its HTTP/system ports.
                 slurm_env_scrub = "unset ${!SLURM_@} ${!PMI_@} ${!PMIX_@}"
-                bash_preamble = (
-                    f"{slurm_env_scrub} && {bash_preamble}"
-                    if bash_preamble
-                    else slurm_env_scrub
-                )
+                bash_preamble = f"{slurm_env_scrub} && {bash_preamble}" if bash_preamble else slurm_env_scrub
 
             proc = start_srun_process(
                 command=cmd,

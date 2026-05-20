@@ -3,10 +3,11 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # SA-Bench: Throughput/latency benchmark
-# Expects: endpoint isl osl concurrencies req_rate tokenizer_path model_name is_disaggregated total_gpus prefill_gpus decode_gpus random_range_ratio [num_requests] [dataset_name] [dataset_path]
+# Expects: endpoint isl osl concurrencies req_rate tokenizer_path model_name is_disaggregated total_gpus prefill_gpus decode_gpus random_range_ratio [num_requests] [dataset_name] [dataset_path] [skip_warmup]
 # When dataset_name=preformatted, dataset_path is the in-container path to a JSONL file
 # (one record per line: {"input": {"messages": [...]}, "num_tokens": N, "max_tokens": M}).
 # In that mode bench.sh skips --random-* flags and --use-chat-template (template is already baked in).
+# When skip_warmup=true, the per-concurrency warmup run is skipped entirely.
 
 set -e
 
@@ -68,6 +69,8 @@ NUM_REQUESTS_CONFIG=${13:-}
 # Optional: dataset selection. "random" (default) or "preformatted" (JSONL at DATASET_PATH).
 DATASET_NAME=${14:-random}
 DATASET_PATH=${15:-}
+# Optional: "true" to skip the per-concurrency warmup run; anything else (or unset) runs it.
+SKIP_WARMUP=${16:-false}
 
 if [ "$DATASET_NAME" = "preformatted" ] && [ -z "$DATASET_PATH" ]; then
     echo "ERROR: dataset_name=preformatted requires dataset_path (in-container JSONL path)" >&2
@@ -84,7 +87,7 @@ PORT=$(echo "$ENDPOINT" | sed 's|http://||' | cut -d: -f2 | cut -d/ -f1)
 
 WORK_DIR="$(dirname "$0")"
 
-echo "SA-Bench Config: endpoint=${ENDPOINT}; isl=${ISL}; osl=${OSL}; concurrencies=${CONCURRENCIES}; req_rate=${REQ_RATE}; model=${MODEL_NAME}; num_requests=${NUM_REQUESTS_CONFIG:-<10x concurrency>}; dataset=${DATASET_NAME}${DATASET_PATH:+ (${DATASET_PATH})}"
+echo "SA-Bench Config: endpoint=${ENDPOINT}; isl=${ISL}; osl=${OSL}; concurrencies=${CONCURRENCIES}; req_rate=${REQ_RATE}; model=${MODEL_NAME}; num_requests=${NUM_REQUESTS_CONFIG:-<10x concurrency>}; dataset=${DATASET_NAME}${DATASET_PATH:+ (${DATASET_PATH})}; skip_warmup=${SKIP_WARMUP}"
 
 # Build dataset args once. For "random" we synthesize prompts with --random-*;
 # for "preformatted" we point at a pre-baked JSONL and skip tokenization entirely.
@@ -138,19 +141,23 @@ start_all_profiling
 
 for concurrency in "${CONCURRENCY_LIST[@]}"; do
 
-    num_warmup_prompts=$((concurrency * 2))
-    python3 -u "${WORK_DIR}/benchmark_serving.py" \
-        --model "${MODEL_NAME}" --tokenizer "${MODEL_PATH}" \
-        --host "$HOST" --port "$PORT" \
-        --backend "dynamo" --endpoint /v1/completions \
-        --disable-tqdm \
-        "${DATASET_ARGS[@]}" \
-        --num-prompts "$num_warmup_prompts" \
-        --ignore-eos \
-        --request-rate 250 \
-        --percentile-metrics ttft,tpot,itl,e2el \
-        --max-concurrency "$concurrency" \
-        --trust-remote-code
+    if [ "$SKIP_WARMUP" = "true" ]; then
+        echo "Skipping warmup for concurrency $concurrency (skip_warmup=true)"
+    else
+        num_warmup_prompts=$((concurrency * 2))
+        python3 -u "${WORK_DIR}/benchmark_serving.py" \
+            --model "${MODEL_NAME}" --tokenizer "${MODEL_PATH}" \
+            --host "$HOST" --port "$PORT" \
+            --backend "dynamo" --endpoint /v1/completions \
+            --disable-tqdm \
+            "${DATASET_ARGS[@]}" \
+            --num-prompts "$num_warmup_prompts" \
+            --ignore-eos \
+            --request-rate 250 \
+            --percentile-metrics ttft,tpot,itl,e2el \
+            --max-concurrency "$concurrency" \
+            --trust-remote-code
+    fi
 
     if [ -n "$NUM_REQUESTS_CONFIG" ]; then
         num_prompts="$NUM_REQUESTS_CONFIG"

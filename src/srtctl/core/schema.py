@@ -550,6 +550,12 @@ class BenchmarkConfig:
     # container_mounts/extra_mount and pass the in-container path here.
     dataset_name: str | None = None
     dataset_path: str | None = None
+    # SA-bench: when true, skip the per-concurrency warmup run (the one with
+    # num_prompts = concurrency * 2 at --request-rate 250). Useful when you've
+    # already pre-warmed the server (e.g., via a previous sweep, an external
+    # warmup script, or DeepGEMM cache reuse) and want to avoid the extra time
+    # or extra load on the server. Default: False (warmup runs).
+    skip_warmup: bool = False
 
     def get_concurrency_list(self) -> list[int]:
         if self.concurrencies is None:
