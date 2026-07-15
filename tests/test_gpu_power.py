@@ -96,9 +96,9 @@ class TestBuildPowerSetupBash:
         bash = build_power_setup_bash({0: 700, 1: 700, 4: 500, 5: 500})
 
         assert bash == (
-            "sudo nvidia-smi -pm 1 -i 0,1,4,5 && "
-            "sudo nvidia-smi -pl 500 -i 4,5 && "
-            "sudo nvidia-smi -pl 700 -i 0,1"
+            "nvidia-smi -pm 1 -i 0,1,4,5 || sudo -n nvidia-smi -pm 1 -i 0,1,4,5 && "
+            "nvidia-smi -pl 500 -i 4,5 || sudo -n nvidia-smi -pl 500 -i 4,5 && "
+            "nvidia-smi -pl 700 -i 0,1 || sudo -n nvidia-smi -pl 700 -i 0,1"
         )
 
     def test_empty_map_returns_empty_string(self):
@@ -132,11 +132,11 @@ class TestApplyGpuPowerLimits:
         assert first_call["container_image"] is None
         assert first_call["srun_options"] == {"export": "ALL"}
         assert first_call["use_bash_wrapper"] is False
-        assert "sudo nvidia-smi -pl 700 -i 0,1" in first_call["command"][2]
+        assert "sudo -n nvidia-smi -pl 700 -i 0,1" in first_call["command"][2]
 
         second_call = mock_srun.call_args_list[1].kwargs
         assert second_call["nodelist"] == ["gpu-02"]
-        assert "sudo nvidia-smi -pl 500 -i 2,3" in second_call["command"][2]
+        assert "sudo -n nvidia-smi -pl 500 -i 2,3" in second_call["command"][2]
 
     @patch("srtctl.core.gpu_power.start_srun_process")
     def test_nonzero_exit_raises(self, mock_srun):

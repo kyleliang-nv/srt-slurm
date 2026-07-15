@@ -55,6 +55,11 @@ def build_node_gpu_power_map(
     return {node: dict(gpu_map) for node, gpu_map in node_gpus.items()}
 
 
+def _nvidia_smi_cmd(args: str) -> str:
+    """Run nvidia-smi, falling back to passwordless sudo when needed."""
+    return f"nvidia-smi {args} || sudo -n nvidia-smi {args}"
+
+
 def build_power_setup_bash(gpu_to_watts: dict[int, int]) -> str:
     """Build bash that enables persistence mode and sets per-GPU power limits."""
     if not gpu_to_watts:
@@ -67,10 +72,10 @@ def build_power_setup_bash(gpu_to_watts: dict[int, int]) -> str:
     for gpu_idx, watts in gpu_to_watts.items():
         by_tgp[watts].append(gpu_idx)
 
-    parts = [f"sudo nvidia-smi -pm 1 -i {gpu_list}"]
+    parts = [_nvidia_smi_cmd(f"-pm 1 -i {gpu_list}")]
     for watts in sorted(by_tgp):
         gpu_ids = ",".join(str(gpu_idx) for gpu_idx in sorted(by_tgp[watts]))
-        parts.append(f"sudo nvidia-smi -pl {watts} -i {gpu_ids}")
+        parts.append(_nvidia_smi_cmd(f"-pl {watts} -i {gpu_ids}"))
 
     return " && ".join(parts)
 
@@ -109,7 +114,9 @@ def apply_gpu_power_limits(
         return_code = proc.wait()
         if return_code != 0:
             raise RuntimeError(
-                f"Failed to set GPU power limits on {node} (exit {return_code}); see {power_log}"
+                f"Failed to set GPU power limits on {node} (exit {return_code}); see {power_log}. "
+                "Ensure nvidia-smi works without sudo or passwordless sudo is configured for "
+                "/usr/bin/nvidia-smi (sudo -n nvidia-smi)."
             )
 
         logger.info("GPU power limits applied on %s", node)

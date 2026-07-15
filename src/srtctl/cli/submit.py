@@ -189,7 +189,7 @@ def show_config_details(config: SrtConfig) -> None:
         console.print(Panel(power_table, border_style="magenta"))
         console.print(
             "[dim]Applied host-side per GPU before workers start: "
-            "sudo nvidia-smi -pm 1 && sudo nvidia-smi -pl <TGP> -i <gpu>[/]"
+            "nvidia-smi -pm/-pl (fallback: sudo -n nvidia-smi)[/]"
         )
 
 
