@@ -174,6 +174,24 @@ def show_config_details(config: SrtConfig) -> None:
     if numactl_membind:
         console.print(f"[dim]backend launch:[/] numactl -m {numactl_membind}")
 
+    # --- GPU power limits ---
+    if config.gpu_power and config.gpu_power.enabled:
+        power_table = Table(title="GPU Power Limits (TGP, watts)", show_lines=False, pad_edge=False)
+        power_table.add_column("Role", style="dim", width=14)
+        power_table.add_column("TGP", style="yellow")
+        for role, value in [
+            ("prefill", config.gpu_power.prefill_tgp),
+            ("decode", config.gpu_power.decode_tgp),
+            ("aggregated", config.gpu_power.agg_tgp),
+        ]:
+            if value is not None:
+                power_table.add_row(role, str(value))
+        console.print(Panel(power_table, border_style="magenta"))
+        console.print(
+            "[dim]Applied host-side per GPU before workers start: "
+            "sudo nvidia-smi -pm 1 && sudo nvidia-smi -pl <TGP> -i <gpu>[/]"
+        )
+
 
 def generate_minimal_sbatch_script(
     config: SrtConfig,

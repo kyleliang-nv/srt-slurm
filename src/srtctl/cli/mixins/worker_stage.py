@@ -12,6 +12,7 @@ import shlex
 from collections import defaultdict
 from typing import TYPE_CHECKING, Any
 
+from srtctl.core.gpu_power import apply_gpu_power_limits
 from srtctl.core.processes import ManagedProcess, NamedProcesses
 from srtctl.core.slurm import start_srun_process
 
@@ -352,6 +353,20 @@ class WorkerStageMixin:
             log_file=worker_log,
             node=leader.node,
             critical=True,
+        )
+
+    def apply_gpu_power_limits_if_configured(self) -> None:
+        """Set per-GPU TGP on worker nodes before launching backend workers."""
+        gpu_power = self.config.gpu_power
+        if gpu_power is None or not gpu_power.enabled:
+            return
+
+        logger.info("Applying configured GPU power limits")
+        apply_gpu_power_limits(
+            self.backend_processes,
+            gpu_power,
+            log_dir=self.runtime.log_dir,
+            srun_options=self.runtime.srun_options,
         )
 
     def start_all_workers(self) -> NamedProcesses:

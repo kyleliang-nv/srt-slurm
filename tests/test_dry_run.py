@@ -196,6 +196,32 @@ class TestDryRunEnvironment:
         assert "dynamo" in output
 
 
+class TestDryRunGpuPower:
+    """Test that GPU power limits appear in dry-run output."""
+
+    def test_gpu_power_limits_shown(self, capsys):
+        config = _make_config({
+            "gpu_power": {
+                "prefill_tgp": 700,
+                "decode_tgp": 500,
+            },
+        })
+        show_config_details(config)
+        output = capsys.readouterr().out
+        assert "GPU Power Limits" in output
+        assert "prefill" in output
+        assert "700" in output
+        assert "decode" in output
+        assert "500" in output
+        assert "nvidia-smi" in output
+
+    def test_no_gpu_power_no_output(self, capsys):
+        config = _make_config()
+        show_config_details(config)
+        output = capsys.readouterr().out
+        assert "GPU Power Limits" not in output
+
+
 class TestDryRunSrunOptions:
     """Test that srun options appear in dry-run output."""
 

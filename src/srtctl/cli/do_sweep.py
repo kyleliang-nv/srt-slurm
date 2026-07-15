@@ -227,6 +227,7 @@ class SweepOrchestrator(WorkerStageMixin, FrontendStageMixin, BenchmarkStageMixi
 
             # Stage 2: Workers
             reporter.report(JobStatus.WORKERS, JobStage.WORKERS, "Starting workers")
+            self.apply_gpu_power_limits_if_configured()
             worker_procs = self.start_all_workers()
             registry.add_processes(worker_procs)
 

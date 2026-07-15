@@ -829,6 +829,32 @@ class OutputConfig:
 
 
 @dataclass(frozen=True)
+class GpuPowerConfig:
+    """Per-role GPU total graphics power (TGP) limits in watts.
+
+    Limits are applied per physical GPU index on each worker node via host-side
+    ``nvidia-smi`` before workers start. Prefill and decode can use different
+    limits even when they share a node.
+    """
+
+    prefill_tgp: int | None = None
+    decode_tgp: int | None = None
+    agg_tgp: int | None = None
+
+    @property
+    def enabled(self) -> bool:
+        return any(value is not None for value in (self.prefill_tgp, self.decode_tgp, self.agg_tgp))
+
+    def __post_init__(self):
+        for field_name in ("prefill_tgp", "decode_tgp", "agg_tgp"):
+            value = getattr(self, field_name)
+            if value is not None and value <= 0:
+                raise ValidationError(f"gpu_power.{field_name} must be a positive integer, got {value}")
+
+    Schema: ClassVar[type[Schema]] = Schema
+
+
+@dataclass(frozen=True)
 class MonitoringConfig:
     """Built-in GPU performance monitoring during benchmark execution.
 
@@ -921,11 +947,15 @@ class SrtConfig:
     # Built-in GPU performance monitoring (runs on all worker nodes during benchmark)
     monitoring: MonitoringConfig | None = None
 
+    # Optional per-role GPU TGP limits (host-side nvidia-smi before workers start)
+    gpu_power: GpuPowerConfig | None = None
+
     Schema: ClassVar[type[Schema]] = Schema
 
     def __post_init__(self):
         """Validate configuration after initialization."""
         self._validate_profiling()
+        self._validate_gpu_power()
 
     def _validate_profiling(self):
         """Validate profiling configuration matches serving mode."""
@@ -963,6 +993,30 @@ class SrtConfig:
                 )
             if (r.agg_workers or 0) <= 0:
                 raise ValidationError("Aggregated mode requires agg_workers to be > 0.")
+
+    def _validate_gpu_power(self):
+        """Validate gpu_power settings match serving mode."""
+        if self.gpu_power is None or not self.gpu_power.enabled:
+            return
+
+        r = self.resources
+        gp = self.gpu_power
+        if r.is_disaggregated:
+            if gp.agg_tgp is not None:
+                raise ValidationError(
+                    "Disaggregated mode does not support gpu_power.agg_tgp; use prefill_tgp/decode_tgp."
+                )
+            if gp.prefill_tgp is not None and (r.prefill_workers or 0) <= 0:
+                raise ValidationError("gpu_power.prefill_tgp requires prefill_workers > 0.")
+            if gp.decode_tgp is not None and (r.decode_workers or 0) <= 0:
+                raise ValidationError("gpu_power.decode_tgp requires decode_workers > 0.")
+        else:
+            if gp.prefill_tgp is not None or gp.decode_tgp is not None:
+                raise ValidationError(
+                    "Aggregated mode only supports gpu_power.agg_tgp; prefill_tgp/decode_tgp are not allowed."
+                )
+            if gp.agg_tgp is not None and (r.agg_workers or 0) <= 0:
+                raise ValidationError("gpu_power.agg_tgp requires agg_workers > 0.")
 
     @classmethod
     def from_yaml(cls, yaml_path: Path) -> "SrtConfig":
