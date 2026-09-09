@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate the AWS-CMH GB300 port of InferenceMAX PR #284's GB200 sweep.
+"""Generate the OCI-HSG GB200 duplicate of InferenceMAX PR #284's sweep.
 
 The source recipes are read from an immutable InferenceMAX checkout.  The
 generator changes only platform-specific paths, NICs, Slurm settings, and the
@@ -18,27 +18,30 @@ import yaml
 
 INFERENCEMAX_COMMIT = "7ae649d194874b4570533ea2c809a4c0811b1dea"
 SRT_SLURM_COMMIT = "d50ee7280c33d469df8708e363e23be2456e94fb"
+OCI_HSG_SRT_SLURM_COMMIT = "06b7cc8306cfcbf362121bc5d972c41c1c81ed30"
 
 REMOTE_BASE = Path(
-    "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_inferencex/"
-    "users/kylliang/srtslurm_studies/20260908_pr284_gb300_aws_cmh"
+    "/lustre/fs1/portfolios/coreai/projects/coreai_comparch_infbench/"
+    "users/kylliang/srtslurm_studies/20260908_pr284_gb200_oci_hsg"
 )
 MODEL_PATH = Path(
-    "/lustre/fsw/portfolios/coreai/projects/coreai_dlalgo_ci/artifacts/model/"
+    "/lustre/fs1/portfolios/coreai/projects/coreai_dlalgo_ci/artifacts/model/"
     "nvidia_minimax-m3-nvfp4/hf/hf-9014640_orig"
 )
 DRAFT_MODEL_PATH = Path(
-    "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_inferencex/"
-    "users/kylliang/hf_models/Inferact--MiniMax-M3-EAGLE3-GQA"
+    "/lustre/fs1/portfolios/coreai/projects/coreai_dlalgo_ci/artifacts/model/"
+    "inferact_minimax-m3-eagle3-gqa/hf/hf-9669248_orig"
 )
-HF_HUB_CACHE = Path(
-    "/scratch/fsw/portfolios/coreai/projects/coreai_comparch_inferencex/"
-    "users/kylliang/hf_models/.cache/hub"
+HF_CACHE = Path(
+    "/lustre/fs1/portfolios/coreai/projects/coreai_comparch_inferencex/"
+    "common/cache"
 )
+AGENTX_CACHE = HF_CACHE / "datasets-agentx-aiperfb7b16"
+CONTAINER_DIR = HF_CACHE / "containers"
 RECIPE_DIR = Path(
     "benchmarks/multi_node/srt-slurm-recipes/vllm/minimax-m3/gb200-fp4/agentic"
 )
-OUTPUT_DIR = Path("configs/studies/pr284-aws-cmh-gb300-20260908")
+OUTPUT_DIR = Path("configs/studies/pr284-oci-hsg-gb200-20260908")
 
 ARMS = {
     "fix1-v028-flashinfer": {
@@ -108,38 +111,45 @@ def set_speculative_config(config: dict, arm: dict) -> None:
 def transform(source: dict, arm_name: str, arm: dict, point: tuple) -> dict:
     point_name, _stem, concurrency, tp_size, simple_cpu = point
     config = copy.deepcopy(source)
-    run_name = f"pr284-aws-cmh-gb300-{arm_name}-{point_name}"
+    run_name = f"pr284-oci-hsg-gb200-{arm_name}-{point_name}"
+    container_name = arm["image"].replace("/", "_").replace(":", "_")
+    container_path = CONTAINER_DIR / f"{container_name}_arm64.sqsh"
 
     config["name"] = run_name
     config["model"]["path"] = str(MODEL_PATH)
-    config["resources"]["gpu_type"] = "gb300"
+    config["model"]["container"] = str(container_path)
+    config["resources"]["gpu_type"] = "gb200"
     config["slurm"] = {
         "account": "coreai_comparch_inferencex",
         "partition": "batch",
         "time_limit": "04:00:00",
     }
-    config["sbatch_directives"]["switches"] = "1"
+    config["sbatch_directives"].update({"qos": "normal", "gres": "gpu:4"})
 
     environment = config.setdefault("environment", {})
     environment.update(
         {
-            "HF_HOME": str(HF_HUB_CACHE.parent),
+            "HF_HOME": str(HF_CACHE),
             "HF_HUB_OFFLINE": "1",
             "HF_DATASETS_OFFLINE": "1",
+            "SRTCTL_CONTAINER_STAGE_SOURCE": f"docker://{arm['image']}",
+            "SRTCTL_CONTAINER_STAGE_ARCH": "aarch64",
+            "SRTCTL_CONTAINER_STAGE_OUTPUT": str(container_path),
             "MINIMAX_M3_EAGLE3_DRAFT_MODEL": str(DRAFT_MODEL_PATH),
             "MINIMAX_M3_EAGLE3_DRAFT_LOCAL_DIR": str(DRAFT_MODEL_PATH),
             "PR284_INFERENCEMAX_COMMIT": INFERENCEMAX_COMMIT,
-            "PR284_SRT_SLURM_COMMIT": SRT_SLURM_COMMIT,
+            "PR284_SOURCE_SRT_SLURM_COMMIT": SRT_SLURM_COMMIT,
+            "OCI_HSG_SRT_SLURM_COMMIT": OCI_HSG_SRT_SLURM_COMMIT,
             "PR284_SOURCE_HARDWARE": "GB200",
-            "PR284_EXECUTION_HARDWARE": "GB300-AWS-CMH",
+            "PR284_EXECUTION_HARDWARE": "GB200-OCI-HSG",
             "PR284_ROUTING_CONTROL": "kv-router-exact-port",
         }
     )
 
     backend_env = config["backend"]["aggregated_environment"]
-    backend_env["UCX_NET_DEVICES"] = "mlx5_0:1,mlx5_1:1,mlx5_4:1,mlx5_5:1"
-    backend_env["NCCL_IB_HCA"] = "mlx5_0,mlx5_1,mlx5_4,mlx5_5"
-    backend_env["HF_HOME"] = str(HF_HUB_CACHE.parent)
+    backend_env["UCX_NET_DEVICES"] = "mlx5_0:1,mlx5_1:1,mlx5_3:1,mlx5_4:1"
+    backend_env["NCCL_IB_HCA"] = "mlx5_0,mlx5_1,mlx5_3,mlx5_4"
+    backend_env["HF_HOME"] = str(HF_CACHE)
     backend_env["HF_HUB_OFFLINE"] = "1"
 
     set_speculative_config(config, arm)
@@ -156,7 +166,7 @@ def transform(source: dict, arm_name: str, arm: dict, point: tuple) -> dict:
             "RESULT_FILENAME": run_name,
             "DURATION": "3600",
             "FULL_E2E_DURATION_SECONDS": "3600",
-            "RUNNER_TYPE": "gb300-aws-cmh",
+            "RUNNER_TYPE": "gb200-oci-hsg",
             "IMAGE": arm["image"],
             "SPEC_DECODING": "eagle3-gqa-k3-synthetic-al2.78",
             "TP": str(tp_size),
@@ -165,9 +175,9 @@ def transform(source: dict, arm_name: str, arm: dict, point: tuple) -> dict:
             "AIPERF_TRACE_IDLE_GAP_CAP_SECONDS": "300",
             "AIPERF_SERVER_METRICS_COLLECTION_INTERVAL": "1.0",
             "AGENTIC_WARMUP_GRACE_PERIOD": "1800",
-            "SOURCE_CLUSTER": "AWS-CMH",
+            "SOURCE_CLUSTER": "OCI-HSG",
             "PORT_ID": run_name,
-            "STUDY_CHANGE": "pr284-exact-runtime-port-gb200-to-gb300",
+            "STUDY_CHANGE": "pr284-exact-runtime-duplicate-on-oci-hsg-gb200",
             "ROUTING_CONTROL": "pr284-kv-router-exact-port",
             "KV_OFFLOADING": "simplecpu" if simple_cpu else "disabled",
         }
@@ -175,8 +185,8 @@ def transform(source: dict, arm_name: str, arm: dict, point: tuple) -> dict:
 
     config["extra_mount"] = [
         f"{REMOTE_BASE / 'InferenceMAX'}:/infmax-workspace",
-        f"{REMOTE_BASE / 'aiperf-mmap-cache'}:/aiperf_mmap_cache",
-        f"{HF_HUB_CACHE}:/hf_hub_cache",
+        f"{AGENTX_CACHE}:/aiperf_mmap_cache",
+        f"{HF_CACHE}:/hf_hub_cache",
         f"{DRAFT_MODEL_PATH}:{DRAFT_MODEL_PATH}",
     ]
     return config
@@ -184,11 +194,12 @@ def transform(source: dict, arm_name: str, arm: dict, point: tuple) -> dict:
 
 def validate(config: dict, arm_name: str, arm: dict, point: tuple) -> None:
     point_name, _stem, concurrency, tp_size, simple_cpu = point
-    assert config["resources"]["gpu_type"] == "gb300"
+    assert config["resources"]["gpu_type"] == "gb200"
     assert config["resources"]["gpus_per_agg"] == tp_size
     assert config["resources"]["agg_nodes"] == tp_size // 4
     assert config["slurm"]["time_limit"] == "04:00:00"
-    assert config["model"]["container"] == arm["image"]
+    assert config["identity"]["container"]["image"] == arm["image"]
+    assert config["model"]["container"].startswith(str(CONTAINER_DIR))
     assert config["dynamo"]["version"] == arm["dynamo"]
     assert config["frontend"]["args"]["router-mode"] == "kv"
 
@@ -206,6 +217,12 @@ def validate(config: dict, arm_name: str, arm: dict, point: tuple) -> None:
     assert env["DURATION"] == "3600"
     assert env["TP"] == str(tp_size)
     assert env["ROUTING_CONTROL"] == "pr284-kv-router-exact-port"
+    assert config["environment"]["OCI_HSG_SRT_SLURM_COMMIT"] == (
+        OCI_HSG_SRT_SLURM_COMMIT
+    )
+    assert config["environment"]["SRTCTL_CONTAINER_STAGE_SOURCE"] == (
+        f"docker://{arm['image']}"
+    )
     assert ("kv-transfer-config" in vllm) is simple_cpu
     assert point_name in config["name"]
     assert arm_name in config["name"]
@@ -244,7 +261,7 @@ def main() -> None:
             expected.add(path)
 
     for stale in output_dir.glob("*.yaml"):
-        if stale not in expected:
+        if stale not in expected and not stale.name.startswith("srtslurm."):
             stale.unlink()
 
     print(f"generated and validated {len(expected)} configs in {output_dir}")

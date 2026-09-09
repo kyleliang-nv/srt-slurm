@@ -1,7 +1,7 @@
-name: pr284-aws-cmh-gb300-fix1-v028-flashinfer-tp4-simplecpu-c25
+name: pr284-oci-hsg-gb200-fix1-v028-flashinfer-tp4-simplecpu-c25
 model:
-  path: /lustre/fsw/portfolios/coreai/projects/coreai_dlalgo_ci/artifacts/model/nvidia_minimax-m3-nvfp4/hf/hf-9014640_orig
-  container: vllm/vllm-openai:v0.28.0
+  path: /lustre/fs1/portfolios/coreai/projects/coreai_dlalgo_ci/artifacts/model/nvidia_minimax-m3-nvfp4/hf/hf-9014640_orig
+  container: /lustre/fs1/portfolios/coreai/projects/coreai_comparch_inferencex/common/cache/containers/vllm_vllm-openai_v0.28.0_arm64.sqsh
   precision: fp4
 identity:
   model:
@@ -15,15 +15,19 @@ dynamo:
   install: true
 environment:
   ETCD_LEASE_TTL: '7200'
-  HF_HOME: /scratch/fsw/portfolios/coreai/projects/coreai_comparch_inferencex/users/kylliang/hf_models/.cache
+  HF_HOME: /lustre/fs1/portfolios/coreai/projects/coreai_comparch_inferencex/common/cache
   HF_HUB_OFFLINE: '1'
   HF_DATASETS_OFFLINE: '1'
-  MINIMAX_M3_EAGLE3_DRAFT_MODEL: /scratch/fsw/portfolios/coreai/projects/coreai_comparch_inferencex/users/kylliang/hf_models/Inferact--MiniMax-M3-EAGLE3-GQA
-  MINIMAX_M3_EAGLE3_DRAFT_LOCAL_DIR: /scratch/fsw/portfolios/coreai/projects/coreai_comparch_inferencex/users/kylliang/hf_models/Inferact--MiniMax-M3-EAGLE3-GQA
+  SRTCTL_CONTAINER_STAGE_SOURCE: docker://vllm/vllm-openai:v0.28.0
+  SRTCTL_CONTAINER_STAGE_ARCH: aarch64
+  SRTCTL_CONTAINER_STAGE_OUTPUT: /lustre/fs1/portfolios/coreai/projects/coreai_comparch_inferencex/common/cache/containers/vllm_vllm-openai_v0.28.0_arm64.sqsh
+  MINIMAX_M3_EAGLE3_DRAFT_MODEL: /lustre/fs1/portfolios/coreai/projects/coreai_dlalgo_ci/artifacts/model/inferact_minimax-m3-eagle3-gqa/hf/hf-9669248_orig
+  MINIMAX_M3_EAGLE3_DRAFT_LOCAL_DIR: /lustre/fs1/portfolios/coreai/projects/coreai_dlalgo_ci/artifacts/model/inferact_minimax-m3-eagle3-gqa/hf/hf-9669248_orig
   PR284_INFERENCEMAX_COMMIT: 7ae649d194874b4570533ea2c809a4c0811b1dea
-  PR284_SRT_SLURM_COMMIT: d50ee7280c33d469df8708e363e23be2456e94fb
+  PR284_SOURCE_SRT_SLURM_COMMIT: d50ee7280c33d469df8708e363e23be2456e94fb
+  OCI_HSG_SRT_SLURM_COMMIT: 06b7cc8306cfcbf362121bc5d972c41c1c81ed30
   PR284_SOURCE_HARDWARE: GB200
-  PR284_EXECUTION_HARDWARE: GB300-AWS-CMH
+  PR284_EXECUTION_HARDWARE: GB200-OCI-HSG
   PR284_ROUTING_CONTROL: kv-router-exact-port
 slurm:
   account: coreai_comparch_inferencex
@@ -33,7 +37,7 @@ health_check:
   max_attempts: 2160
   interval_seconds: 10
 resources:
-  gpu_type: gb300
+  gpu_type: gb200
   gpus_per_node: 4
   agg_nodes: 1
   agg_workers: 1
@@ -73,10 +77,10 @@ backend:
     NCCL_MNNVL_ENABLE: '1'
     NCCL_NVLS_ENABLE: '1'
     UCX_MEMTYPE_CACHE: n
-    UCX_NET_DEVICES: mlx5_0:1,mlx5_1:1,mlx5_4:1,mlx5_5:1
+    UCX_NET_DEVICES: mlx5_0:1,mlx5_1:1,mlx5_3:1,mlx5_4:1
     UCX_TLS: cuda_copy,cuda_ipc,rc
-    NCCL_IB_HCA: mlx5_0,mlx5_1,mlx5_4,mlx5_5
-    HF_HOME: /scratch/fsw/portfolios/coreai/projects/coreai_comparch_inferencex/users/kylliang/hf_models/.cache
+    NCCL_IB_HCA: mlx5_0,mlx5_1,mlx5_3,mlx5_4
+    HF_HOME: /lustre/fs1/portfolios/coreai/projects/coreai_comparch_inferencex/common/cache
     HF_HUB_OFFLINE: '1'
   vllm_config:
     aggregated:
@@ -92,7 +96,7 @@ backend:
       max-model-len: 1048576
       language-model-only: true
       kv-cache-dtype: fp8
-      speculative-config: '{"method":"eagle3","model":"/scratch/fsw/portfolios/coreai/projects/coreai_comparch_inferencex/users/kylliang/hf_models/Inferact--MiniMax-M3-EAGLE3-GQA","num_speculative_tokens":3,"attention_backend":"FLASHINFER","rejection_sample_method":"synthetic","synthetic_acceptance_length":2.78}'
+      speculative-config: '{"method":"eagle3","model":"/lustre/fs1/portfolios/coreai/projects/coreai_dlalgo_ci/artifacts/model/inferact_minimax-m3-eagle3-gqa/hf/hf-9669248_orig","num_speculative_tokens":3,"attention_backend":"FLASHINFER","rejection_sample_method":"synthetic","synthetic_acceptance_length":2.78}'
       kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":777389080576,"cpu_bytes_to_use_per_rank":194347270144,"lazy_offload":true}}'
       stream-interval: 20
       compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE"}'
@@ -105,7 +109,8 @@ backend:
 sbatch_directives:
   cpus-per-task: '144'
   mem: '0'
-  switches: '1'
+  qos: normal
+  gres: gpu:4
 srun_options:
   container-remap-root: ''
 benchmark:
@@ -130,10 +135,10 @@ benchmark:
     FRAMEWORK: dynamo-vllm
     PRECISION: fp4
     CONC: '25'
-    RESULT_FILENAME: pr284-aws-cmh-gb300-fix1-v028-flashinfer-tp4-simplecpu-c25
+    RESULT_FILENAME: pr284-oci-hsg-gb200-fix1-v028-flashinfer-tp4-simplecpu-c25
     DURATION: '3600'
     FULL_E2E_DURATION_SECONDS: '3600'
-    RUNNER_TYPE: gb300-aws-cmh
+    RUNNER_TYPE: gb200-oci-hsg
     IMAGE: vllm/vllm-openai:v0.28.0
     SPEC_DECODING: eagle3-gqa-k3-synthetic-al2.78
     TP: '4'
@@ -142,13 +147,13 @@ benchmark:
     AIPERF_TRACE_IDLE_GAP_CAP_SECONDS: '300'
     AIPERF_SERVER_METRICS_COLLECTION_INTERVAL: '1.0'
     AGENTIC_WARMUP_GRACE_PERIOD: '1800'
-    SOURCE_CLUSTER: AWS-CMH
-    PORT_ID: pr284-aws-cmh-gb300-fix1-v028-flashinfer-tp4-simplecpu-c25
-    STUDY_CHANGE: pr284-exact-runtime-port-gb200-to-gb300
+    SOURCE_CLUSTER: OCI-HSG
+    PORT_ID: pr284-oci-hsg-gb200-fix1-v028-flashinfer-tp4-simplecpu-c25
+    STUDY_CHANGE: pr284-exact-runtime-duplicate-on-oci-hsg-gb200
     ROUTING_CONTROL: pr284-kv-router-exact-port
     KV_OFFLOADING: simplecpu
 extra_mount:
-- /scratch/fsw/portfolios/coreai/projects/coreai_comparch_inferencex/users/kylliang/srtslurm_studies/20260908_pr284_gb300_aws_cmh/InferenceMAX:/infmax-workspace
-- /scratch/fsw/portfolios/coreai/projects/coreai_comparch_inferencex/users/kylliang/srtslurm_studies/20260908_pr284_gb300_aws_cmh/aiperf-mmap-cache:/aiperf_mmap_cache
-- /scratch/fsw/portfolios/coreai/projects/coreai_comparch_inferencex/users/kylliang/hf_models/.cache/hub:/hf_hub_cache
-- /scratch/fsw/portfolios/coreai/projects/coreai_comparch_inferencex/users/kylliang/hf_models/Inferact--MiniMax-M3-EAGLE3-GQA:/scratch/fsw/portfolios/coreai/projects/coreai_comparch_inferencex/users/kylliang/hf_models/Inferact--MiniMax-M3-EAGLE3-GQA
+- /lustre/fs1/portfolios/coreai/projects/coreai_comparch_infbench/users/kylliang/srtslurm_studies/20260908_pr284_gb200_oci_hsg/InferenceMAX:/infmax-workspace
+- /lustre/fs1/portfolios/coreai/projects/coreai_comparch_inferencex/common/cache/datasets-agentx-aiperfb7b16:/aiperf_mmap_cache
+- /lustre/fs1/portfolios/coreai/projects/coreai_comparch_inferencex/common/cache:/hf_hub_cache
+- /lustre/fs1/portfolios/coreai/projects/coreai_dlalgo_ci/artifacts/model/inferact_minimax-m3-eagle3-gqa/hf/hf-9669248_orig:/lustre/fs1/portfolios/coreai/projects/coreai_dlalgo_ci/artifacts/model/inferact_minimax-m3-eagle3-gqa/hf/hf-9669248_orig

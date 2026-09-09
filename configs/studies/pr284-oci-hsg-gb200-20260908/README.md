@@ -1,15 +1,16 @@
-# InferenceMAX PR #284 AWS-CMH GB300 port
+# InferenceMAX PR #284 OCI-HSG GB200 duplicate
 
 This study ports the complete 18-point performance matrix from InferenceMAX
-PR #284 commit `7ae649d194874b4570533ea2c809a4c0811b1dea` to AWS-CMH. The runtime is
-pinned to srt-slurm main commit `d50ee7280c33d469df8708e363e23be2456e94fb`,
-which is the exact revision used by the corresponding PR workflow.
+PR #284 commit `7ae649d194874b4570533ea2c809a4c0811b1dea` to OCI-HSG. The source
+workflow uses srt-slurm main commit
+`d50ee7280c33d469df8708e363e23be2456e94fb`. OCI executes through the
+already-proven checkout at `06b7cc8306cfcbf362121bc5d972c41c1c81ed30`,
+which adds the cluster's in-allocation shared-image staging path. Both commits
+are recorded in every resolved config.
 
-AWS-CMH currently exposes GB300 NVL72 compute rather than GB200. These points
-therefore accelerate the three-arm runtime comparison but are not substitute
-GB200 measurements. The only intentional platform adaptations are the GB300
-hardware label, AWS-CMH Slurm settings, AWS NIC names, and shared filesystem
-paths.
+OCI-HSG exposes GB200 NVL72 compute, so these are same-hardware duplicates of
+the PR sweep. The only intentional adaptations are OCI-HSG Slurm settings,
+NIC names, shared filesystem paths, and in-allocation Enroot image staging.
 
 Each arm contains the same six one-hour AgentX points:
 
@@ -36,6 +37,6 @@ it does not select among workers.
 Regenerate the files from an immutable InferenceMAX checkout with:
 
 ```bash
-python3 scripts/generate_pr284_aws_cmh_gb300.py \
+python3 scripts/generate_pr284_oci_hsg_gb200.py \
   --inference-max-root /path/to/InferenceMAX-at-7ae649d
 ```

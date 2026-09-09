@@ -1,0 +1,14 @@
+default_account: coreai_comparch_inferencex
+default_partition: batch
+default_time_limit: "04:00:00"
+gpus_per_node: 4
+network_interface: ""
+srtctl_root: /lustre/fs1/portfolios/coreai/projects/coreai_comparch_infbench/users/kylliang/srtslurm_studies/20260813_minimax_m3_triage/srt-slurm-oci-hsg-agg-090426
+output_dir: /lustre/fs1/portfolios/coreai/projects/coreai_comparch_infbench/users/kylliang/srtslurm_studies/20260908_pr284_gb200_oci_hsg/results
+use_segment_sbatch_directive: true
+use_gpus_per_node_directive: false
+default_sbatch_directives:
+  gres: gpu:4
+  qos: normal
+containers: {}
+model_paths: {}
