@@ -1124,6 +1124,7 @@ profiling:
   prefill:
     start_step: 10                   # Step to start profiling
     stop_step: 20                    # Step to stop profiling
+    capture_scope: "selected"        # "selected" (default) or "all"
     worker_index: 0                  # Logical worker to profile
     worker_rank: 0                   # Physical process rank within the worker
   decode:
@@ -1155,13 +1156,15 @@ Each phase config has:
 | ----- | ---- | -------- | ------- | ----------- |
 | `start_step` | int | No | null | Step to start profiling |
 | `stop_step` | int | No | null | Step to stop profiling |
+| `capture_scope` | string | No | "selected" | Capture one selected physical process or "all" processes |
 | `worker_index` | int | No | 0 | Logical worker selected for iteration-based Nsight |
 | `worker_rank` | int | No | 0 | Physical process rank selected within the worker |
 
 ### Profiling Modes
 
-- **nsys**: NVIDIA Nsight Systems profiling. For vLLM and SGLang, wraps only
-  the selected physical process and sends its control endpoint to the
+- **nsys**: NVIDIA Nsight Systems profiling. For vLLM and SGLang, each phase
+  captures one selected physical process by default. Set `capture_scope: all`
+  to wrap every physical process and send every usable control endpoint to the
   benchmark. A Dynamo control endpoint uses the worker's `DYN_SYSTEM_PORT`.
 - **torch**: PyTorch profiler. Sets `SGLANG_TORCH_PROFILER_DIR` environment variable.
 
@@ -1169,7 +1172,8 @@ TRT-LLM does not use the HTTP profiling helper. Its executor uses
 `TLLM_PROFILE_START_STOP` to trigger the CUDA profiler, so its Nsight wrapper
 continues to cover the complete MPI endpoint. With vLLM `dp_launch_mode:
 per_node`, a physical process can own multiple local DP ranks; use `per_gpu`
-when the report must contain exactly one DP rank.
+when each DP rank needs a separate report. `worker_index` and `worker_rank`
+are ignored when `capture_scope: all`.
 
 ### Validation Rules
 
@@ -1211,8 +1215,7 @@ profiling:
   aggregated:
     start_step: 10
     stop_step: 25
-    worker_index: 0
-    worker_rank: 0
+    capture_scope: all
 ```
 
 ---

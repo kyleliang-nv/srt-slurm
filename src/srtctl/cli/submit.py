@@ -456,10 +456,15 @@ def show_config_details(config: SrtConfig) -> None:
                     ("aggregated", profiling.aggregated),
                 ):
                     if phase is not None and not profiling.is_nsys_time:
+                        target = (
+                            "all physical processes"
+                            if phase.capture_scope == "all"
+                            else f"worker {phase.worker_index}, rank {phase.worker_rank}"
+                        )
                         details.add_row(
                             "profiling",
                             f"{mode} target",
-                            f"worker {phase.worker_index}, rank {phase.worker_rank}",
+                            target,
                         )
 
         tachometer = config.observability.tachometer

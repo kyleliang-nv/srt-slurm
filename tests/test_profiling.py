@@ -109,6 +109,15 @@ class TestProfilingConfig:
         assert not profiling.selects_process("decode", 1, 3)
         assert not profiling.selects_process("prefill", 2, 3)
 
+        all_processes = ProfilingConfig(
+            type="nsys",
+            decode=ProfilingPhaseConfig(capture_scope="all"),
+        )
+        assert all_processes.captures_all_processes("decode")
+        assert all_processes.selects_process("decode", 0, 0)
+        assert all_processes.selects_process("decode", 4, 7)
+        assert not all_processes.selects_process("prefill", 0, 0)
+
     def test_nsys_trtllm_prefix_includes_extra_args(self):
         """TRTLLM nsys wrap should honor extra_nsys_args (same ordering as default path: before -o)."""
         from srtctl.core.schema import ProfilingConfig
@@ -374,6 +383,33 @@ class TestProfilingValidation:
                 ),
             )
 
+    def test_nsys_capture_scope_validation(self):
+        """Only the documented selected/all capture scopes are accepted."""
+        from marshmallow import ValidationError
+
+        from srtctl.core.schema import (
+            ModelConfig,
+            ProfilingConfig,
+            ProfilingPhaseConfig,
+            ResourceConfig,
+            SrtConfig,
+        )
+
+        with pytest.raises(ValidationError, match="capture_scope"):
+            SrtConfig(
+                name="test",
+                model=ModelConfig(path="/model", container="/container", precision="fp8"),
+                resources=ResourceConfig(gpu_type="h100", agg_nodes=1, agg_workers=1),
+                profiling=ProfilingConfig(
+                    type="nsys",
+                    aggregated=ProfilingPhaseConfig(
+                        start_step=0,
+                        stop_step=10,
+                        capture_scope="invalid",
+                    ),
+                ),
+            )
+
     @pytest.mark.parametrize(
         ("profiling_kwargs", "error"),
         [
@@ -631,6 +667,13 @@ class TestProfilingTargetSelection:
         assert stage._profiling_selects_process(selected)
         assert not stage._profiling_selects_process(other)
 
+        stage.config.profiling = ProfilingConfig(
+            type="nsys",
+            aggregated=ProfilingPhaseConfig(capture_scope="all"),
+        )
+        assert stage._profiling_selects_process(selected)
+        assert stage._profiling_selects_process(other)
+
         stage.config.profiling = ProfilingConfig(type="nsys-time", delay_secs=1, duration_secs=1)
         assert stage._profiling_selects_process(selected)
         assert stage._profiling_selects_process(other)
@@ -702,6 +745,22 @@ class TestProfilingTargetSelection:
         env = stage._get_benchmark_profiling_env(get_runner("agentperf"), endpoints)
         assert env["PROFILE_AGG_ENDPOINTS"] == "worker-b.test:7001"
         assert env["PROFILE_OUTPUT_DIR"] == "/logs/profiles"
+
+        stage.config.profiling = ProfilingConfig(
+            type="nsys",
+            aggregated=ProfilingPhaseConfig(
+                start_step=4,
+                stop_step=12,
+                capture_scope="all",
+            ),
+        )
+        all_endpoints = stage._profiling_worker_endpoints()
+        assert all_endpoints == [
+            ("agg", "worker-a.test", 7000),
+            ("agg", "worker-b.test", 7001),
+        ]
+        all_env = stage._get_benchmark_profiling_env(get_runner("agentperf"), all_endpoints)
+        assert all_env["PROFILE_AGG_ENDPOINTS"] == "worker-a.test:7000,worker-b.test:7001"
 
     def test_missing_physical_rank_is_rejected(self):
         from types import SimpleNamespace

@@ -241,7 +241,7 @@ class TestDryRunExecutionExtensions:
                     "capture_range_end": "repeat:1:async",
                     "nsys_library_paths": ["/host/lib64", "/host/lib"],
                     "prefill": {"start_step": 1, "stop_step": 3, "worker_index": 0, "worker_rank": 0},
-                    "decode": {"start_step": 2, "stop_step": 4, "worker_index": 0, "worker_rank": 1},
+                    "decode": {"start_step": 2, "stop_step": 4, "capture_scope": "all"},
                 }
             }
         )
@@ -251,7 +251,7 @@ class TestDryRunExecutionExtensions:
         assert "cuda-sw,nvtx" in output
         assert "repeat:1:async" in output
         assert "/host/lib64:/host/lib" in output
-        assert "worker 0, rank 1" in output
+        assert "all physical processes" in output
 
     def test_custom_benchmark_details_shown(self, capsys):
         config = _make_config(

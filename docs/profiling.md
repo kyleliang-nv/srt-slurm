@@ -67,11 +67,13 @@ profiling:
   prefill:
     start_step: 0 # Step to start profiling for prefill workers
     stop_step: 50 # Step to stop profiling for prefill workers
+    capture_scope: selected # "selected" (default) or "all"
     worker_index: 0 # Logical prefill worker to capture
     worker_rank: 0 # Physical process rank within that worker
   decode:
     start_step: 0 # Step to start profiling for decode workers
     stop_step: 50 # Step to stop profiling for decode workers
+    capture_scope: selected
     worker_index: 0
     worker_rank: 0
 
@@ -92,6 +94,7 @@ profiling:
 | `decode.stop_step`      | Step number to end decode profiling           | `50`     |
 | `aggregated.start_step` | Step number to begin aggregated profiling     | `0`      |
 | `aggregated.stop_step`  | Step number to end aggregated profiling       | `50`     |
+| `*.capture_scope`       | Capture one selected process or all physical processes | `selected` |
 | `*.worker_index`        | Logical worker selected for iteration-based nsys | `0`    |
 | `*.worker_rank`         | Physical process rank selected within that worker | `0`  |
 | `nsys_trace`            | Non-TRT-LLM Nsight activity domains          | `cuda,nvtx` |
@@ -119,9 +122,10 @@ Profiling has specific requirements:
 
 - Profiling is independent of benchmark selection. AgentPerf, SA-Bench,
   SGLang-Bench, and Trace-Replay can control iteration-triggered profiling.
-- For non-TRT-LLM `nsys`, srtctl wraps only the process selected by each
-  phase's `worker_index` and `worker_rank`. The benchmark receives only that
-  process's profiling control endpoint.
+- For non-TRT-LLM `nsys`, each phase defaults to `capture_scope: selected`,
+  which wraps the process identified by `worker_index` and `worker_rank`.
+  Set `capture_scope: all` to wrap every physical process in that phase and
+  send every usable control endpoint to the benchmark.
 - A Dynamo worker is controlled through its `DYN_SYSTEM_PORT`, not through the
   public OpenAI serving port.
 - Direct SGLang uses its native profiling endpoint. Dynamo-hosted vLLM and
@@ -133,7 +137,8 @@ Profiling has specific requirements:
 `worker_rank` identifies a process in srtctl's physical topology. With vLLM
 `backend.dp_launch_mode: per_gpu`, this is the DP rank. With `per_node`, one
 wrapped process may own multiple local DP ranks; use `per_gpu` when a capture
-must isolate exactly one DP rank.
+must produce a separate report for every DP rank. `worker_index` and
+`worker_rank` are ignored when `capture_scope: all`.
 
 ### nsys-specific behavior
 
@@ -211,13 +216,11 @@ profiling:
   prefill:
     start_step: 10
     stop_step: 30
-    worker_index: 0
-    worker_rank: 0
+    capture_scope: all
   decode:
     start_step: 10
     stop_step: 30
-    worker_index: 0
-    worker_rank: 0
+    capture_scope: all
 ```
 
 ## Output Files

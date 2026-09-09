@@ -827,6 +827,7 @@ class ProfilingPhaseConfig:
 
     start_step: int | None = None  # Step to start profiling
     stop_step: int | None = None  # Step to stop profiling
+    capture_scope: Literal["selected", "all"] = "selected"
     worker_index: int = 0  # Logical worker within the phase
     worker_rank: int = 0  # Physical process rank within that worker
 
@@ -971,7 +972,18 @@ class ProfilingConfig:
     def selects_process(self, mode: str, worker_index: int, worker_rank: int) -> bool:
         """Whether an iteration-triggered capture targets this process."""
         phase = self._get_phase_config(mode)
-        return bool(phase is not None and phase.worker_index == worker_index and phase.worker_rank == worker_rank)
+        return bool(
+            phase is not None
+            and (
+                phase.capture_scope == "all"
+                or (phase.worker_index == worker_index and phase.worker_rank == worker_rank)
+            )
+        )
+
+    def captures_all_processes(self, mode: str) -> bool:
+        """Whether the phase captures every physical process."""
+        phase = self._get_phase_config(mode)
+        return bool(phase is not None and phase.capture_scope == "all")
 
     @property
     def nsys_binary(self) -> str:
@@ -2293,7 +2305,7 @@ class SrtConfig:
             if (r.agg_workers or 0) <= 0:
                 raise ValidationError("Aggregated mode requires agg_workers to be > 0.")
 
-        if prof.is_nsys and backend_type != "trtllm":
+        if prof.is_nsys:
             phase_workers = (
                 (("prefill", prof.prefill, r.prefill_workers), ("decode", prof.decode, r.decode_workers))
                 if is_disaggregated
@@ -2301,6 +2313,10 @@ class SrtConfig:
             )
             for phase_name, phase_config, worker_count in phase_workers:
                 assert phase_config is not None
+                if phase_config.capture_scope not in ("selected", "all"):
+                    raise ValidationError(f"profiling.{phase_name}.capture_scope must be 'selected' or 'all'")
+                if backend_type == "trtllm" or phase_config.capture_scope == "all":
+                    continue
                 if phase_config.worker_index < 0:
                     raise ValidationError(f"profiling.{phase_name}.worker_index must be non-negative")
                 if phase_config.worker_index >= (worker_count or 0):

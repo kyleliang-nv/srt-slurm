@@ -236,9 +236,10 @@ class BenchmarkStageMixin:
     def _profiling_worker_endpoints(self) -> list[tuple[str, str, int]]:
         """Return only the process endpoints that control this capture.
 
-        Iteration-triggered Nsight captures for vLLM and SGLang target one
-        physical process per serving phase. Time-based Nsight, Torch, and
-        TRT-LLM retain their existing endpoint-wide behavior.
+        Iteration-triggered Nsight captures for vLLM and SGLang target either
+        one selected physical process or all processes in each serving phase.
+        Time-based Nsight, Torch, and TRT-LLM retain their existing
+        endpoint-wide behavior.
         """
         profiling = self.config.profiling
         if not profiling.is_nsys or profiling.is_nsys_time or self.config.backend_type == "trtllm":
@@ -249,6 +250,7 @@ class BenchmarkStageMixin:
         for process in self.backend_processes:
             worker_index = process.endpoint_index
             worker_rank = process.node_rank
+            capture_all = profiling.captures_all_processes(process.endpoint_mode)
             if not profiling.selects_process(
                 process.endpoint_mode,
                 worker_index,
@@ -263,6 +265,11 @@ class BenchmarkStageMixin:
             else:
                 port = process.http_port
             if port <= 0:
+                # Native distributed servers expose one HTTP control endpoint
+                # for multiple physical processes. Wrap every process, but send
+                # only the routable leader endpoint to the benchmark.
+                if capture_all:
+                    continue
                 raise ValueError(
                     "Selected profiling worker does not expose an HTTP control endpoint: "
                     f"mode={process.endpoint_mode}, worker_index={worker_index}, "
@@ -287,7 +294,7 @@ class BenchmarkStageMixin:
             missing = ", ".join(sorted(missing_modes))
             raise ValueError(f"No physical process matches the profiling selector for: {missing}")
 
-        return endpoints
+        return list(dict.fromkeys(endpoints))
 
     def _wait_for_service_ready(self, stop_event: threading.Event) -> bool:
         """Wait for frontend counts and any adapter-specific backend barrier."""
