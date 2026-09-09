@@ -179,7 +179,7 @@ def transform(source: dict, arm_name: str, arm: dict, point: tuple) -> dict:
             "PORT_ID": run_name,
             "STUDY_CHANGE": "pr284-exact-runtime-duplicate-on-oci-hsg-gb200",
             "ROUTING_CONTROL": "pr284-kv-router-exact-port",
-            "KV_OFFLOADING": "simplecpu" if simple_cpu else "disabled",
+            "KV_OFFLOADING": "dram" if simple_cpu else "none",
         }
     )
 
@@ -217,6 +217,7 @@ def validate(config: dict, arm_name: str, arm: dict, point: tuple) -> None:
     assert env["DURATION"] == "3600"
     assert env["TP"] == str(tp_size)
     assert env["ROUTING_CONTROL"] == "pr284-kv-router-exact-port"
+    assert env["KV_OFFLOADING"] == ("dram" if simple_cpu else "none")
     assert config["environment"]["OCI_HSG_SRT_SLURM_COMMIT"] == (
         OCI_HSG_SRT_SLURM_COMMIT
     )

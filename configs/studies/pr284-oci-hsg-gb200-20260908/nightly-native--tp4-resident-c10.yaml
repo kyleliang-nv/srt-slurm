@@ -145,7 +145,7 @@ benchmark:
     PORT_ID: pr284-oci-hsg-gb200-nightly-native-tp4-resident-c10
     STUDY_CHANGE: pr284-exact-runtime-duplicate-on-oci-hsg-gb200
     ROUTING_CONTROL: pr284-kv-router-exact-port
-    KV_OFFLOADING: disabled
+    KV_OFFLOADING: none
 extra_mount:
 - /lustre/fs1/portfolios/coreai/projects/coreai_comparch_infbench/users/kylliang/srtslurm_studies/20260908_pr284_gb200_oci_hsg/InferenceMAX:/infmax-workspace
 - /lustre/fs1/portfolios/coreai/projects/coreai_comparch_inferencex/common/cache/datasets-agentx-aiperfb7b16:/aiperf_mmap_cache
