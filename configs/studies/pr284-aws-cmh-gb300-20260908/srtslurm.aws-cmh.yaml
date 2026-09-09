@@ -1,0 +1,14 @@
+default_account: coreai_comparch_inferencex
+default_partition: batch
+default_time_limit: "04:00:00"
+gpus_per_node: 4
+network_interface: ""
+srtctl_root: /scratch/fsw/portfolios/coreai/projects/coreai_comparch_inferencex/users/kylliang/srtslurm_studies/20260908_pr284_gb300_aws_cmh/srt-slurm
+output_dir: /scratch/fsw/portfolios/coreai/projects/coreai_comparch_inferencex/users/kylliang/srtslurm_studies/20260908_pr284_gb300_aws_cmh/srt-slurm/outputs
+use_segment_sbatch_directive: false
+use_gpus_per_node_directive: true
+containers:
+  "vllm/vllm-openai:v0.28.0": /scratch/fsw/portfolios/coreai/projects/coreai_comparch_inferencex/users/kylliang/srtslurm_studies/download_dockerhub/vllm_vllm-openai_v0.28.0_arm64.sqsh
+  "vllm/vllm-openai:v0.27.1": /scratch/fsw/portfolios/coreai/projects/coreai_comparch_inferencex/users/kylliang/srtslurm_studies/download_dockerhub/vllm_vllm-openai_v0.27.1_arm64.sqsh
+  "vllm/vllm-openai:nightly-9ea8f3ffc354901b740f0b31988900897b7221d7": /scratch/fsw/portfolios/coreai/projects/coreai_comparch_inferencex/users/kylliang/srtslurm_studies/download_dockerhub/vllm_vllm-openai_nightly-9ea8f3ffc354901b740f0b31988900897b7221d7_arm64.sqsh
+model_paths: {}
