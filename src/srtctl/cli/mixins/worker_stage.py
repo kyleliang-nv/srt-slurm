@@ -132,6 +132,22 @@ class WorkerStageMixin:
             environment.setdefault("VLLM_PLUGINS", "")
         return environment
 
+    def _profiling_selects_process(self, process: "Process") -> bool:
+        """Whether this physical process should be wrapped for profiling.
+
+        Wall-clock captures retain their existing all-process behavior. TRT-LLM
+        also remains endpoint-wide because one MPI launch owns all executor
+        ranks and uses ``TLLM_PROFILE_START_STOP`` instead of HTTP control.
+        """
+        profiling = self.config.profiling
+        if not profiling.is_nsys or profiling.is_nsys_time or self.backend.type == "trtllm":
+            return True
+        return profiling.selects_process(
+            process.endpoint_mode,
+            process.endpoint_index,
+            process.node_rank,
+        )
+
     def start_worker(self, process: "Process", endpoint_processes: list["Process"]) -> ManagedProcess:
         """Start a single worker process (one srun per node, used by SGLang)."""
         mode = process.endpoint_mode
@@ -145,10 +161,11 @@ class WorkerStageMixin:
 
         # Profiling setup
         profiling = self.config.profiling
+        profiling_selects_process = self._profiling_selects_process(process)
         nsys_prefix = None
         if profiling.enabled:
             (self.runtime.log_dir / "profiles" / mode).mkdir(parents=True, exist_ok=True)
-        if profiling.is_nsys:
+        if profiling.is_nsys and profiling_selects_process:
             gpu_label = process.cuda_visible_devices.replace(",", "-")
             nsys_output = f"/logs/profiles/{mode}/{process.node}_{mode}_w{index}_profile_gpu{gpu_label}"
             nsys_prefix = profiling.get_nsys_prefix(
@@ -163,7 +180,7 @@ class WorkerStageMixin:
             frontend_type=self.config.frontend.type,
             nsys_prefix=nsys_prefix,
             dump_config_path=config_dump,
-            profiling=profiling,
+            profiling=profiling if profiling_selects_process else None,
         )
 
         # Environment variables
@@ -202,11 +219,6 @@ class WorkerStageMixin:
             formatted_value = value.format_map(SafeDict(template_vars))
             env_to_set[key] = formatted_value
 
-        # Add profiling environment variables
-        if profiling.enabled:
-            profile_dir = str(self.runtime.log_dir / "profiles")
-            env_to_set.update(profiling.get_env_vars(mode, profile_dir))
-
         should_set_cvd = getattr(self.backend, "should_set_cuda_visible_devices", lambda _process: True)
         force_cvd = getattr(self.config.dynamo, "sidecar", False) is True and self.backend.type == "vllm"
         if (force_cvd or should_set_cvd(process)) and len(process.gpu_indices) < self.runtime.gpus_per_node:
@@ -221,6 +233,18 @@ class WorkerStageMixin:
         if hasattr(self.backend, "get_mooncake_worker_env"):
             local_hostname = get_hostname_ip(process.node, self.runtime.network_interface)
             env_to_set.update(self.backend.get_mooncake_worker_env(self.runtime.infra_node_ip, local_hostname))
+
+        # Add profiling environment variables last so optional Nsight library
+        # paths are prepended to the worker's fully composed LD_LIBRARY_PATH.
+        if profiling.enabled and profiling_selects_process:
+            profile_dir = str(self.runtime.log_dir / "profiles")
+            env_to_set.update(
+                profiling.get_env_vars(
+                    mode,
+                    profile_dir,
+                    existing_library_path=env_to_set.get("LD_LIBRARY_PATH"),
+                )
+            )
 
         self._apply_kvbm_endpoint_env(env_to_set, endpoint_processes)
 
@@ -300,10 +324,11 @@ class WorkerStageMixin:
 
         # Profiling setup
         profiling = self.config.profiling
+        profiling_selects_process = self._profiling_selects_process(leader)
         nsys_prefix = None
         if profiling.enabled:
             (self.runtime.log_dir / "profiles" / mode).mkdir(parents=True, exist_ok=True)
-        if profiling.is_nsys:
+        if profiling.is_nsys and profiling_selects_process:
             nsys_output = f"/logs/profiles/{mode}/{leader.node}_{mode}_w{index}_profile_rank%q{{SLURM_PROCID}}"
             nsys_prefix = profiling.get_nsys_prefix(
                 nsys_output, frontend_type=self.config.frontend.type, backend_type=self.config.backend_type
@@ -317,7 +342,7 @@ class WorkerStageMixin:
             frontend_type=self.config.frontend.type,
             nsys_prefix=nsys_prefix,
             dump_config_path=config_dump,
-            profiling=profiling,
+            profiling=profiling if profiling_selects_process else None,
         )
 
         # Environment variables
@@ -343,11 +368,6 @@ class WorkerStageMixin:
         # Add config environment variables
         env_to_set.update(self.runtime.environment)
 
-        # Add profiling environment variables
-        if profiling.enabled:
-            profile_dir = str(self.runtime.log_dir / "profiles")
-            env_to_set.update(profiling.get_env_vars(mode, profile_dir))
-
         should_set_cvd = getattr(self.backend, "should_set_cuda_visible_devices", lambda _process: True)
         force_cvd = getattr(self.config.dynamo, "sidecar", False) is True and self.backend.type == "vllm"
         if (force_cvd or should_set_cvd(leader)) and len(leader.gpu_indices) < self.runtime.gpus_per_node:
@@ -360,6 +380,18 @@ class WorkerStageMixin:
         if hasattr(self.backend, "get_mooncake_worker_env"):
             local_hostname = get_hostname_ip(leader.node, self.runtime.network_interface)
             env_to_set.update(self.backend.get_mooncake_worker_env(self.runtime.infra_node_ip, local_hostname))
+
+        # Add profiling environment variables after the worker environment so
+        # configured Nsight library search paths take precedence.
+        if profiling.enabled and profiling_selects_process:
+            profile_dir = str(self.runtime.log_dir / "profiles")
+            env_to_set.update(
+                profiling.get_env_vars(
+                    mode,
+                    profile_dir,
+                    existing_library_path=env_to_set.get("LD_LIBRARY_PATH"),
+                )
+            )
 
         self._apply_kvbm_endpoint_env(env_to_set, endpoint_processes)
 

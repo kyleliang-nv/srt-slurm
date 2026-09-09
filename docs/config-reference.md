@@ -1113,13 +1113,19 @@ Profiling configuration for nsys or torch profiler.
 profiling:
   type: "nsys"                       # "none", "nsys", or "torch"
 
-  # Extra arguments for nsys profile (when type is nsys or nsys-time)
-  extra_nsys_args: ["--stats=true"]       # Optional: list of strings
+  # Nsight command settings (when type is nsys or nsys-time)
+  nsys_trace: "cuda,nvtx"
+  trace_fork_before_exec: true        # Optional; unset keeps the Dynamo default
+  capture_range_end: "stop"
+  nsys_library_paths: ["/usr/local/cuda/compat"]
+  extra_nsys_args: ["--stats=true"]
 
   # Phase-specific profiling step configs
   prefill:
     start_step: 10                   # Step to start profiling
     stop_step: 20                    # Step to stop profiling
+    worker_index: 0                  # Logical worker to profile
+    worker_rank: 0                   # Physical process rank within the worker
   decode:
     start_step: 10
     stop_step: 20
@@ -1129,27 +1135,41 @@ profiling:
     stop_step: 20
 ```
 
-| Field         | Type   | Required | Default | Description                              |
-| ------------- | ------ | -------- | ------- | ---------------------------------------- |
-| `type`        | string | No       | "none"  | Profiling type: "none", "nsys", "torch"  |
-| `extra_nsys_args` | list[string] | No | null | Extra args for nsys profile (when type is `nsys` or `nsys-time`) |
-| `prefill`     | object | Disaggregated | null | Prefill phase config                   |
-| `decode`      | object | Disaggregated | null | Decode phase config                    |
-| `aggregated`  | object | Aggregated | null | Aggregated phase config                  |
+| Field | Type | Required | Default | Description |
+| ----- | ---- | -------- | ------- | ----------- |
+| `type` | string | No | "none" | Profiling type: "none", "nsys", "nsys-time", or "torch" |
+| `nsys_trace` | string | No | "cuda,nvtx" | Nsight activity domains for non-TRT-LLM workers |
+| `trace_fork_before_exec` | bool | No | null | Override non-TRT-LLM child-process tracing; null enables it for Dynamo only |
+| `capture_range_end` | string | No | "stop" | Non-TRT-LLM Nsight behavior when a CUDA profiler range ends |
+| `nsys_library_paths` | list[string] | No | null | Paths prepended to the worker `LD_LIBRARY_PATH` |
+| `extra_nsys_args` | list[string] | No | null | Extra args for `nsys profile` |
+| `prefill` | object | Disaggregated | null | Prefill phase config |
+| `decode` | object | Disaggregated | null | Decode phase config |
+| `aggregated` | object | Aggregated | null | Aggregated phase config |
 
 ### ProfilingPhaseConfig
 
 Each phase config has:
 
-| Field        | Type | Required | Default | Description                    |
-| ------------ | ---- | -------- | ------- | ------------------------------ |
-| `start_step` | int  | No       | null    | Step to start profiling        |
-| `stop_step`  | int  | No       | null    | Step to stop profiling         |
+| Field | Type | Required | Default | Description |
+| ----- | ---- | -------- | ------- | ----------- |
+| `start_step` | int | No | null | Step to start profiling |
+| `stop_step` | int | No | null | Step to stop profiling |
+| `worker_index` | int | No | 0 | Logical worker selected for iteration-based Nsight |
+| `worker_rank` | int | No | 0 | Physical process rank selected within the worker |
 
 ### Profiling Modes
 
-- **nsys**: NVIDIA Nsight Systems profiling. Wraps worker command with `nsys profile`.
+- **nsys**: NVIDIA Nsight Systems profiling. For vLLM and SGLang, wraps only
+  the selected physical process and sends its control endpoint to the
+  benchmark. A Dynamo control endpoint uses the worker's `DYN_SYSTEM_PORT`.
 - **torch**: PyTorch profiler. Sets `SGLANG_TORCH_PROFILER_DIR` environment variable.
+
+TRT-LLM does not use the HTTP profiling helper. Its executor uses
+`TLLM_PROFILE_START_STOP` to trigger the CUDA profiler, so its Nsight wrapper
+continues to cover the complete MPI endpoint. With vLLM `dp_launch_mode:
+per_node`, a physical process can own multiple local DP ranks; use `per_gpu`
+when the report must contain exactly one DP rank.
 
 ### Validation Rules
 
@@ -1186,10 +1206,13 @@ resources:
 
 profiling:
   type: "nsys"
-  extra_nsys_args: ["--stats=true", "--trace=osrt"]
+  nsys_trace: "cuda,nvtx,osrt"
+  extra_nsys_args: ["--stats=true"]
   aggregated:
     start_step: 10
     stop_step: 25
+    worker_index: 0
+    worker_rank: 0
 ```
 
 ---

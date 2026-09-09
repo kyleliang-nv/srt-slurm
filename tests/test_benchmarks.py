@@ -1168,6 +1168,18 @@ class TestAgentPerfRunner:
         assert (SCRIPTS_DIR / "agentperf" / "bench.sh").exists()
         assert (SCRIPTS_DIR / "agentperf" / "rollup.py").exists()
 
+    def test_script_controls_profiling_around_measured_traffic(self):
+        """AgentPerf arms after preflight and always stops the selected profiler."""
+        script = (SCRIPTS_DIR / "agentperf" / "bench.sh").read_text()
+
+        assert 'source "${LIB_DIR}/profiling_trtllm.sh"' in script
+        assert 'source "${LIB_DIR}/profiling.sh"' in script
+        assert "profiling_init_from_env" in script
+        assert "trap stop_all_profiling EXIT" in script
+        assert script.index("# ---- run") < script.index("start_all_profiling")
+        assert script.index("start_all_profiling") < script.index("uv run --no-sync python agentperf/run.py")
+        assert script.index("uv run --no-sync python agentperf/run.py") < script.rindex("stop_all_profiling")
+
     def test_environment_passthrough(self):
         """benchmark.env reaches the client environment."""
         from unittest.mock import MagicMock

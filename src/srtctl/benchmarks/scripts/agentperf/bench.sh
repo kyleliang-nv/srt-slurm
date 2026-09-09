@@ -27,6 +27,17 @@ CLIENT_DIR=$3
 CONFIG_PATH=$4
 CONCURRENCIES=$5
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+LIB_DIR="${SCRIPT_DIR}/../lib"
+if [[ "${PROFILING_BACKEND:-}" == "trtllm" ]]; then
+  # TRT-LLM starts and stops cudaProfilerApi inside the executor.
+  source "${LIB_DIR}/profiling_trtllm.sh"
+else
+  source "${LIB_DIR}/profiling.sh"
+fi
+profiling_init_from_env
+trap stop_all_profiling EXIT
+
 # When the client runs on a different node than the frontend, localhost is
 # wrong; benchmark_stage injects the frontend's real host/port.
 if [[ -n "${SRT_FRONTEND_HOST:-}" ]]; then
@@ -146,6 +157,7 @@ cd "$CLIENT_DIR"
 echo "[agentperf] endpoint=$ENDPOINT model=$MODEL_NAME concurrencies=$CONCURRENCIES config=$RUNTIME/benchmark_config.yaml"
 # Simple space-separated tokens only — values are word-split, never shell-parsed.
 read -r -a EXTRA_ARGS <<< "${AGENTPERF_EXTRA_ARGS:-}" || true
+start_all_profiling
 uv run --no-sync python agentperf/run.py \
   --config "$RUNTIME/benchmark_config.yaml" \
   --base-url "${ENDPOINT}${AGENTPERF_BASE_PATH:-/v1}" \
@@ -154,3 +166,4 @@ uv run --no-sync python agentperf/run.py \
   --request-log-path "$RESULTS_DIR/requests.jsonl" \
   --results-dir "$RESULTS_DIR" \
   ${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"}
+stop_all_profiling
