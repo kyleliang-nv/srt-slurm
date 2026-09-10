@@ -128,8 +128,10 @@ Profiling has specific requirements:
   send every usable control endpoint to the benchmark.
 - A Dynamo worker is controlled through its `DYN_SYSTEM_PORT`, not through the
   public OpenAI serving port.
-- Direct SGLang uses its native profiling endpoint. Dynamo-hosted vLLM and
-  SGLang use Dynamo's engine-control endpoint.
+- Direct SGLang uses its native `/start_profile` and `/stop_profile` endpoints.
+  Dynamo-hosted vLLM and SGLang use
+  `/engine/control/start_profile` and `/engine/control/stop_profile` on each
+  selected worker's `DYN_SYSTEM_PORT`.
 - TRT-LLM remains endpoint-wide: its executor consumes
   `TLLM_PROFILE_START_STOP` and calls `cudaProfilerStart`/`cudaProfilerStop`
   internally, without benchmark-side HTTP control.

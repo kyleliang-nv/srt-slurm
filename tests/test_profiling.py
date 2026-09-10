@@ -3,10 +3,42 @@
 
 """Tests for profiling configuration, validation, and benchmark runner."""
 
+import subprocess
+
 import pytest
 
 from srtctl.benchmarks import get_runner
 from srtctl.benchmarks.base import SCRIPTS_DIR
+
+
+@pytest.mark.parametrize(
+    ("frontend_type", "start_path", "stop_path"),
+    [
+        ("dynamo", "/engine/control/start_profile", "/engine/control/stop_profile"),
+        ("sglang", "/start_profile", "/stop_profile"),
+    ],
+)
+def test_profiling_shell_uses_frontend_control_routes(frontend_type, start_path, stop_path):
+    """The shared shell helper must use each frontend's actual control API."""
+    helper = SCRIPTS_DIR / "lib" / "profiling.sh"
+    shell = r"""
+source "$1"
+SRTCTL_FRONTEND_TYPE="$2"
+curl() {
+    printf 'CURL %s\n' "$*" >&2
+}
+profiling__start_profile_on_worker "worker.example:7500" 1 3 "/profiles" "nsys" 9090
+profiling__stop_profile_on_worker "worker.example:7500" 9090
+"""
+    result = subprocess.run(
+        ["bash", "-c", shell, "bash", str(helper), frontend_type],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    assert f"http://worker.example:7500{start_path}" in result.stderr
+    assert f"http://worker.example:7500{stop_path}" in result.stderr
 
 
 class TestProfilingConfig:
